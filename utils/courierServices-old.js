@@ -2,76 +2,6 @@
 
 const DEFAULT_COUNTRY = 'ZA';
 
-/**
- * PUDO Locker Size Specifications
- * All dimensions in cm, weight in kg
- * Service level codes for Shiplogic ECO delivery
- */
-const LOCKER_SIZES = {
-  XS: {
-    name: 'Locker XS',
-    length: 15,
-    width: 58,
-    height: 7,
-    weight: 2,
-    service_level_code: 'L2LXS - ECO',
-  },
-  S: {
-    name: 'Locker S',
-    length: 39,
-    width: 58,
-    height: 7,
-    weight: 5,
-    service_level_code: 'L2LS - ECO',
-  },
-  M: {
-    name: 'Locker M',
-    length: 39,
-    width: 58,
-    height: 17,
-    weight: 10,
-    service_level_code: 'L2LM - ECO',
-  },
-  L: {
-    name: 'Locker L',
-    length: 39,
-    width: 58,
-    height: 39,
-    weight: 15,
-    service_level_code: 'L2LL - ECO',
-  },
-};
-
-/**
- * Format parcels for PUDO locker delivery
- * @param {string} lockerSize - Size key: 'XS', 'S', 'M', 'L'
- * @returns {Array} Array with single locker parcel formatted for Shiplogic
- */
-const formatLockerParcel = (lockerSize = 'M') => {
-  const size = lockerSize.toUpperCase();
-  const locker = LOCKER_SIZES[size];
-
-  if (!locker) {
-    console.warn(`⚠️ Unknown locker size: ${lockerSize}, defaulting to M`);
-    const defaultLocker = LOCKER_SIZES.M;
-    return [{
-      parcel_description: `${defaultLocker.name}`,
-      submitted_length_cm: defaultLocker.length,
-      submitted_width_cm: defaultLocker.width,
-      submitted_height_cm: defaultLocker.height,
-      submitted_weight_kg: defaultLocker.weight,
-    }];
-  }
-
-  return [{
-    parcel_description: `PUDO ${locker.name}`,
-    submitted_length_cm: locker.length,
-    submitted_width_cm: locker.width,
-    submitted_height_cm: locker.height,
-    submitted_weight_kg: locker.weight,
-  }];
-};
-
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
@@ -100,10 +30,10 @@ const normalizeCountryCode = (value) => {
 
 const formatIsoDate = (value) => {
   if (!value) {
-    return new Date().toISOString();
+    return new Date().toISOString().split('T')[0];
   }
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+  return Number.isNaN(date.getTime()) ? new Date().toISOString().split('T')[0] : date.toISOString().split('T')[0];
 };
 
 const formatShiplogicAddress = (address = {}, defaults = {}) => ({
@@ -125,27 +55,13 @@ const formatShiplogicContact = (source = {}, fallback = {}) => ({
   email: source.email || fallback.email || '',
 });
 
-const sanitizeCustomTrackingReference = (orderNumber) => {
-  // Shiplogic has strict validation on custom_tracking_reference
-  // Extract just the numeric portion from order number format like "ORD-20260426-7400"
-  // This becomes "202604267400"
-  const numericOnly = String(orderNumber).replace(/[^0-9]/g, '');
-  
-  if (!numericOnly || numericOnly.length === 0) {
-    // Fallback: use timestamp as reference if no numbers found
-    return String(Date.now()).slice(-12); // Last 12 digits of timestamp
-  }
-  
-  return numericOnly;
-};
-
 const formatShiplogicParcels = (parcels = []) => {
   const safeParcels = Array.isArray(parcels) && parcels.length > 0 ? parcels : [{}];
   return safeParcels.map((parcel, index) => ({
-    parcel_description: parcel.description || parcel.parcel_description || 'Custom Parcel',
+    parcel_description: parcel.description || parcel.parcel_description || `Parcel ${index + 1}`,
     submitted_length_cm: toNumber(parcel.length || parcel.lengthCm || parcel.submitted_length_cm, 30) || 20,
     submitted_width_cm: toNumber(parcel.width || parcel.widthCm || parcel.submitted_width_cm, 30) || 20,
-    submitted_height_cm: toNumber(parcel.height || parcel.heightCm || parcel.submitted_height_cm, 5) || 10,
+    submitted_height_cm: toNumber(parcel.height || parcel.heightCm || parcel.submitted_height_cm, 30) || 10,
     submitted_weight_kg: toNumber(parcel.weight || parcel.weightKg || parcel.submitted_weight_kg, 1) || 2,
   }));
 };
@@ -217,7 +133,7 @@ const shiplogicQuoteFromRate = (rate, providerName = 'The Courier Guy') => {
     id: String(defaultId),
     provider: 'courier-guy',
     name: rate.service_level_name || rate.name || providerName,
-    service_level: rate.service_level_code || rate.code || 'LOF'|| 'ECO',
+    service_level: rate.service_level_code || rate.code || 'standard',
     service_level_code: rate.service_level_code || rate.code,
     service_level_id: rate.service_level_id || rate.id,
     price,
@@ -240,12 +156,6 @@ export class CourierGuyService {
     this.apiKey = process.env.COURIER_GUY_API_KEY || process.env.SHIPLOGIC_API_KEY;
     this.apiUrl = process.env.COURIER_GUY_API_URL || process.env.SHIPLOGIC_API_URL || 'https://api.shiplogic.com';
     this.accountId = process.env.SHIPLOGIC_ACCOUNT_ID;
-
-    // Validate API key on initialization
-    if (!this.apiKey) {
-      console.error('❌ Shiplogic API Key not configured!');
-      console.error('Set SHIPLOGIC_API_KEY or COURIER_GUY_API_KEY in environment variables');
-    }
   }
 
   buildHeaders(hasBody, extraHeaders = {}) {
@@ -265,11 +175,6 @@ export class CourierGuyService {
     const hasJsonBody = body !== undefined;
     const payload = hasJsonBody && typeof body === 'object' ? JSON.stringify(body) : body;
 
-    console.log(`🔗 Shiplogic ${method} ${path}`, { 
-      hasBody: !!payload,
-      url: `${this.apiUrl}${path}`
-    });
-
     const response = await fetch(`${this.apiUrl}${path}`, {
       method,
       headers: this.buildHeaders(!!payload, headers),
@@ -279,59 +184,17 @@ export class CourierGuyService {
     const text = await response.text();
     let data = null;
 
-    // Always log response status and first 500 chars of response for debugging
-    const contentType = response.headers.get('content-type') || 'unknown';
-    const isJson = contentType.includes('application/json');
-    
-    console.log(`📨 Shiplogic response: ${response.status} ${response.statusText}`, {
-      contentType,
-      isJson,
-      responseLength: text.length,
-      responsePreview: text.substring(0, 500)
-    });
-
-    // Handle authorization errors specifically
-    if (response.status === 401 || response.status === 403) {
-      console.error('❌ Shiplogic Authentication Failed (401/403)', {
-        status: response.status,
-        hasApiKey: !!this.apiKey,
-        apiKeyPrefix: this.apiKey ? this.apiKey.substring(0, 8) + '...' : 'NOT SET',
-      });
-      throw new Error(`Shiplogic Authentication Failed: ${response.status}. Check API key configuration.`);
-    }
-
     if (text) {
       try {
         data = JSON.parse(text);
       } catch (error) {
-        // If not OK response and response is not JSON, throw error with preview
-        if (!response.ok) {
-          // Check if it's HTML (error page)
-          if (text.includes('<html') || text.includes('<!DOCTYPE')) {
-            console.error('⚠️ Shiplogic returned HTML error page:', {
-              status: response.status,
-              preview: text.substring(0, 300)
-            });
-            throw new Error(`Shiplogic API error ${response.status}: Server returned HTML error page`);
-          }
-          
-          console.error('Shiplogic error response (not JSON):', {
-            status: response.status,
-            statusText: response.statusText,
-            contentType,
-            preview: text.substring(0, 500)
-          });
-          throw new Error(`Shiplogic API error: ${response.status} ${response.statusText} - ${text.substring(0, 200)}`);
-        }
-        // If OK response but not JSON, that's unexpected
         console.error('Shiplogic parse error:', error);
-        console.error('Response was not valid JSON (but status was OK):', text.substring(0, 500));
-        throw new Error(`Failed to parse Shiplogic response (status ${response.status}): ${error.message}`);
+        throw new Error('Failed to parse Shiplogic response');
       }
     }
 
     if (!response.ok) {
-      const message = data?.message || data?.error || text || `Shiplogic request failed (${response.status})`;
+      const message = data?.message || data?.error || text || 'Shiplogic request failed';
       throw new Error(message);
     }
 
@@ -347,7 +210,7 @@ export class CourierGuyService {
         declared_value: toNumber(shipment.declaredValue, 0),
         collection_min_date: formatIsoDate(shipment.collectionDate),
         delivery_min_date: formatIsoDate(shipment.deliveryDate),
-        service_level_code: shipment.service_level_code || shipment.serviceLevelCode || 'LOF'|| 'ECO',
+        service_level_code: shipment.service_level_code || shipment.serviceLevelCode || 'ECO',
       };
 
       if (this.accountId) {
@@ -417,16 +280,13 @@ export class CourierGuyService {
         parcels: formatShiplogicParcels(order.parcels),
         declared_value: toNumber(order.declaredValue, 0),
         collection_min_date: formatIsoDate(order.collectionDate),
-        due_date: formatIsoDate(order.deliveryDate),
         delivery_min_date: formatIsoDate(order.deliveryDate),
         special_instructions_collection: order.collectionNotes || '',
         special_instructions_delivery: order.deliveryNotes || '',
-        custom_tracking_reference: '',
-        customer_reference_name: 'Order no.',
+        custom_tracking_reference: order.orderNumber,
         customer_reference: order.orderNumber,
-        service_level_code: serviceLevel.code || 'LOF' || 'ECO' ,
+        service_level_code: serviceLevel.code,
         mute_notifications: !!order.muteNotifications,
-        opt_in_rates: [],
       };
 
       if (serviceLevel.code) {
@@ -452,24 +312,6 @@ export class CourierGuyService {
       if (this.accountId) {
         payload.account_id = Number(this.accountId);
       }
-
-      console.log(`📤 Sending shipment to Shiplogic with payload:`, {
-        orderNumber: payload.custom_tracking_reference,
-        originalOrderNumber: order.orderNumber,
-        customerReference: payload.customer_reference,
-        serviceLevel: payload.service_level_code,
-        collection: {
-          address: `${payload.collection_address.street_address}, ${payload.collection_address.city}`,
-          contact: payload.collection_contact.name,
-        },
-        delivery: {
-          address: `${payload.delivery_address.street_address}, ${payload.delivery_address.city}`,
-          contact: payload.delivery_contact.name,
-        },
-        parcels: payload.parcels.length,
-        declaredValue: payload.declared_value,
-        payloadSize: JSON.stringify(payload).length,
-      });
 
       const response = await this.request('/shipments', {
         method: 'POST',
@@ -479,109 +321,6 @@ export class CourierGuyService {
       return response;
     } catch (error) {
       console.error('Shiplogic shipment error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Create a PUDO locker shipment (handled by Courier Guy/Shiplogic)
-   * @param {Object} order - Order data
-   * @param {string} lockerSize - Locker size: 'XS', 'S', 'M', 'L'
-   * @param {Object} selectedService - Service level details
-   */
-  async createLockerShipment(order, lockerSize = 'M', selectedService = {}) {
-    try {
-      const size = lockerSize.toUpperCase();
-      const locker = LOCKER_SIZES[size];
-
-      if (!locker) {
-        throw new Error(`Invalid locker size: ${lockerSize}. Must be one of: XS, S, M, L`);
-      }
-
-      const serviceLevel = this.resolveServiceLevel({
-        ...selectedService,
-        service_level_code: locker.service_level_code,
-      });
-
-      if (!serviceLevel.code && !serviceLevel.id) {
-        throw new Error('Shiplogic service level code or ID is required to create a locker shipment');
-      }
-
-      const payload = {
-        collection_address: formatShiplogicAddress(order.collectionAddress, { type: 'residential' }),
-        collection_contact: formatShiplogicContact(order.collectionContact || order.collectionAddress, {
-          name: order.collectionAddress?.name || order.collectionAddress?.company || 'Sender',
-          email: order.collectionAddress?.email,
-          mobile_number: order.collectionAddress?.phone,
-        }),
-        delivery_address: formatShiplogicAddress(order.deliveryAddress, { type: 'residential' }),
-        delivery_contact: formatShiplogicContact(order.deliveryContact || order.deliveryAddress, {
-          name: order.deliveryAddress?.name || order.deliveryAddress?.fullName || 'Recipient',
-          email: order.deliveryAddress?.email,
-          mobile_number: order.deliveryAddress?.phone,
-        }),
-        parcels: formatLockerParcel(lockerSize),
-        declared_value: toNumber(order.declaredValue, 0),
-        collection_min_date: formatIsoDate(order.collectionDate),
-        due_date: formatIsoDate(order.deliveryDate),
-        delivery_min_date: formatIsoDate(order.deliveryDate),
-        special_instructions_collection: order.collectionNotes || '',
-        special_instructions_delivery: order.deliveryNotes || '',
-        custom_tracking_reference: '',
-        customer_reference_name: 'Order no.',
-        customer_reference: order.orderNumber,
-        service_level_code: serviceLevel.code || locker.service_level_code,
-        mute_notifications: !!order.muteNotifications,
-        opt_in_rates: [],
-      };
-
-      if (serviceLevel.code) {
-        payload.service_level_code = serviceLevel.code;
-      }
-
-      if (serviceLevel.id) {
-        payload.service_level_id = serviceLevel.id;
-      }
-
-      if (serviceLevel.rating_reference) {
-        payload.rating_reference = serviceLevel.rating_reference;
-      }
-
-      if (Array.isArray(serviceLevel.opt_in_rates) && serviceLevel.opt_in_rates.length) {
-        payload.opt_in_rates = serviceLevel.opt_in_rates;
-      }
-
-      if (Array.isArray(serviceLevel.opt_in_time_based_rates) && serviceLevel.opt_in_time_based_rates.length) {
-        payload.opt_in_time_based_rates = serviceLevel.opt_in_time_based_rates;
-      }
-
-      if (this.accountId) {
-        payload.account_id = Number(this.accountId);
-      }
-
-      console.log(`📦 Sending PUDO locker shipment to Shiplogic:`, {
-        orderNumber: order.orderNumber,
-        lockerSize: size,
-        lockerSpecs: locker,
-        serviceLevel: payload.service_level_code,
-        collection: {
-          address: `${payload.collection_address.street_address}, ${payload.collection_address.city}`,
-          contact: payload.collection_contact.name,
-        },
-        delivery: {
-          address: `${payload.delivery_address.street_address}, ${payload.delivery_address.city}`,
-          contact: payload.delivery_contact.name,
-        },
-      });
-
-      const response = await this.request('/shipments', {
-        method: 'POST',
-        body: payload,
-      });
-
-      return response;
-    } catch (error) {
-      console.error('Shiplogic locker shipment error:', error);
       throw error;
     }
   }
@@ -602,120 +341,6 @@ export class CourierGuyService {
       return data;
     } catch (error) {
       console.error('Shiplogic tracking error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Find nearby PUDO lockers using Shiplogic API
-   * @param {string} search - Search term (city, postal code, or location)
-   * @param {Object} options - Additional search options (lat, lng, type, etc.)
-   * @returns {Array} Array of PUDO locker locations
-   */
-  async findNearbyLockers(search, options = {}) {
-    try {
-      if (!this.apiKey) {
-        throw new Error('Shiplogic API key is not configured');
-      }
-
-      const params = new URLSearchParams();
-
-      // Default to lockers unless explicitly overridden
-      if (options.type || options.types) {
-        if (options.type) {
-          params.set('type', options.type);
-        }
-        if (options.types) {
-          params.set('types', options.types);
-        }
-      } else {
-        params.set('type', 'locker');
-      }
-
-      if (options.lat && options.lng) {
-        params.set('lat', options.lat);
-        params.set('lng', options.lng);
-        if (options.order_closest) {
-          params.set('order_closest', String(options.order_closest));
-        }
-      }
-
-      const passthroughKeys = [
-        'min_lat',
-        'max_lat',
-        'min_lng',
-        'max_lng',
-        'order_closest',
-        'types',
-        'type',
-      ];
-
-      for (const key of passthroughKeys) {
-        if (options[key] && !params.has(key)) {
-          params.set(key, options[key]);
-        }
-      }
-
-      if (search) {
-        params.set('search', search);
-      }
-
-      const query = params.toString();
-      const response = await fetch(
-        `${this.apiUrl}/pickup-points${query ? `?${query}` : ''}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            'Accept': 'application/json',
-          },
-        }
-      );
-
-      const text = await response.text();
-      const rawText = typeof text === 'string' ? text.trim() : '';
-      const contentType = response.headers.get('content-type') || '';
-      let data = null;
-
-      if (rawText && contentType.includes('application/json')) {
-        try {
-          data = JSON.parse(rawText);
-        } catch (parseError) {
-          console.error('PUDO locker parse error:', {
-            error: parseError,
-            snippet: rawText.slice(0, 200),
-          });
-
-          if (response.ok) {
-            const malformedError = new Error('Shiplogic returned malformed JSON response');
-            malformedError.status = response.status;
-            malformedError.details = rawText;
-            throw malformedError;
-          }
-        }
-      }
-
-      if (!response.ok) {
-        const message =
-          data?.message ||
-          data?.error ||
-          data?.errors?.[0]?.message ||
-          rawText ||
-          `Shiplogic pickup-point request failed (${response.status})`;
-        const error = new Error(message);
-        error.status = response.status;
-        throw error;
-      }
-
-      if (!data) {
-        if (rawText) {
-          throw new Error(`Unexpected Shiplogic pickup-point response: ${rawText.slice(0, 160)}`);
-        }
-        return [];
-      }
-
-      return data;
-    } catch (error) {
-      console.error('PUDO locker search error:', error);
       throw error;
     }
   }
@@ -831,7 +456,6 @@ export class FastwayService {
 /**
  * PUDO Locker Integration
  * Documentation: https://www.pudo.co.za/api
- * Uses Shiplogic API for locker discovery and delivery management
  */
 export class PUDOLockerService {
   constructor() {
@@ -842,12 +466,6 @@ export class PUDOLockerService {
       'https://api.shiplogic.com';
   }
 
-  /**
-   * Find nearby PUDO lockers
-   * @param {string} search - Search term (city, postal code, or location)
-   * @param {Object} options - Additional search options (lat, lng, type, etc.)
-   * @returns {Array} Array of PUDO locker locations
-   */
   async findNearbyLockers(search, options = {}) {
     try {
       if (!this.apiKey) {
@@ -1024,9 +642,7 @@ export class PUDOLockerService {
 }
 
 /**
- * 
- * PUDO Lockers are handled through CourierGuy/Shiplogic with specific locker dimensions.
- * No separate PUDO service is needed - use provider='pudo' with lockerSize in service object.
+ * Unified Courier Service Manager
  */
 export class CourierServiceManager {
   constructor() {
@@ -1068,20 +684,14 @@ export class CourierServiceManager {
     return quotes.sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
   }
 
-  /**
-   * Create a shipment with the specified provider
-   * @param {string} provider - Provider: 'courier-guy', 'fastway', or 'pudo'
-   * @param {Object} order - Order data
-   * @param {Object} service - Service details (may include lockerSize for PUDO)
-   */
   async createShipment(provider, order, service) {
     switch (provider) {
       case 'courier-guy':
         return await this.courierGuy.createShipment(order, service);
-      case 'pudo':
-        return await this.pudo.createDelivery(order, service.lockerId);
       case 'fastway':
         return await this.fastway.createShipment(order, service);
+      case 'pudo':
+        return await this.pudo.createDelivery(order, service.lockerId);
       default:
         throw new Error('Invalid courier provider');
     }
@@ -1091,10 +701,10 @@ export class CourierServiceManager {
     switch (provider) {
       case 'courier-guy':
         return await this.courierGuy.trackShipment(trackingNumber);
-      case 'pudo':
-        return await this.pudo.trackDelivery(trackingNumber);
       case 'fastway':
         return await this.fastway.trackShipment(trackingNumber);
+      case 'pudo':
+        return await this.pudo.trackDelivery(trackingNumber);
       default:
         throw new Error('Invalid courier provider');
     }
@@ -1105,7 +715,7 @@ export class CourierServiceManager {
 export async function createShiplogicShipmentFromOrder(order) {
   const service = new CourierGuyService();
 
-  const serviceLevelCode = order?.courierQuote?.serviceCode || order?.courierQuote?.service_code || order?.courierQuote?.service_level_code || 'LOF';
+  const serviceLevelCode = order?.courierQuote?.serviceCode || order?.courierQuote?.service_code || order?.courierQuote?.service_level_code || 'ECO';
   const parcels = order?.parcelSummary?.parcels?.length ? order.parcelSummary.parcels : [{ description: 'Parcel', weightKg: 1 }];
 
   const collectionAddress = {
@@ -1136,23 +746,6 @@ export async function createShiplogicShipmentFromOrder(order) {
     name: order?.shippingAddress?.fullName,
   };
 
-  // Validate critical fields
-  const missingFields = [];
-  if (!collectionAddress.street_address) missingFields.push('collectionAddress.street_address');
-  if (!collectionAddress.city) missingFields.push('collectionAddress.city');
-  if (!collectionAddress.zone) missingFields.push('collectionAddress.zone');
-  if (!deliveryAddress.street_address) missingFields.push('deliveryAddress.street_address');
-  if (!deliveryAddress.city) missingFields.push('deliveryAddress.city');
-  if (!deliveryAddress.zone) missingFields.push('deliveryAddress.zone');
-  if (!deliveryAddress.name) missingFields.push('deliveryAddress.name');
-  if (!parcels?.length) missingFields.push('parcels');
-
-  if (missingFields.length > 0) {
-    const error = `Missing required fields for Shiplogic shipment: ${missingFields.join(', ')}`;
-    console.error(`❌ ${error}`, { orderNumber: order?.orderNumber, orderId: order?._id });
-    throw new Error(error);
-  }
-
   const shipmentPayload = {
     collectionAddress,
     collectionContact: collectionAddress,
@@ -1168,20 +761,6 @@ export async function createShiplogicShipmentFromOrder(order) {
     muteNotifications: false,
   };
 
-  console.log(`📋 Shipment payload for ${order?.orderNumber}:`, {
-    collection: {
-      address: `${collectionAddress.street_address}, ${collectionAddress.city}, ${collectionAddress.zone}`,
-      contact: collectionAddress.name,
-    },
-    delivery: {
-      address: `${deliveryAddress.street_address}, ${deliveryAddress.city}, ${deliveryAddress.zone}`,
-      contact: deliveryAddress.name,
-    },
-    parcels: parcels.length,
-    declared_value: shipmentPayload.declaredValue,
-    service_level_code: serviceLevelCode,
-  });
-
   const response = await service.createShipment(shipmentPayload, { service_level_code: serviceLevelCode });
 
   const trackingReference = response?.short_tracking_reference || response?.tracking_reference || response?.tracking_reference_number;
@@ -1195,6 +774,3 @@ export async function createShiplogicShipmentFromOrder(order) {
     labelUrl: response?.label_url || response?.label || null,
   };
 }
-
-// Export PUDO locker utilities
-export { LOCKER_SIZES, formatLockerParcel };

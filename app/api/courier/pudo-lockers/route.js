@@ -1,5 +1,5 @@
 // app/api/courier/pudo-lockers/route.js
-import { PUDOLockerService } from '@/utils/courierServices';
+import { CourierGuyService } from '@/utils/courierServices';
 
 export async function GET(request) {
   try {
@@ -33,7 +33,7 @@ export async function GET(request) {
       }
     }
 
-    const pudoService = new PUDOLockerService();
+    const pudoService = new CourierGuyService();
     const lockers = await pudoService.findNearbyLockers(search, extraParams);
 
     return new Response(

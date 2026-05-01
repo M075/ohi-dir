@@ -2,6 +2,7 @@
 import connectDB from '@/config/database';
 import Order from '@/models/Order';
 import { getOrCreateWallet, calculatePlatformFee } from '@/utils/walletHelper';
+import { createShiplogicShipmentFromOrder } from '@/utils/courierServices';
 
 export async function POST(request) {
   try {
@@ -85,6 +86,43 @@ export async function POST(request) {
         }
 
         await order.save();
+
+        // Create shipment on Shiplogic for door-to-door deliveries
+        if (order.fulfillmentOption === 'door-to-door' && !order.courierReference) {
+          try {
+            console.log(`📦 Creating shipment on Shiplogic for order: ${order.orderNumber}`);
+            
+            const shipmentResult = await createShiplogicShipmentFromOrder(order);
+            
+            if (shipmentResult && shipmentResult.shipmentId) {
+              order.courierProvider = 'courier-guy';
+              order.courierReference = shipmentResult.shipmentId;
+              order.trackingNumber = shipmentResult.trackingReference;
+              order.status = 'shipped'; // Mark as shipped once shipment is created
+              order.shippedAt = new Date();
+              order.statusHistory.push({
+                status: 'shipped',
+                timestamp: new Date(),
+                note: `Shipment created on Shiplogic - Reference: ${shipmentResult.shipmentId}`,
+              });
+              
+              console.log(`✅ Shipment created successfully for ${order.orderNumber}:`, {
+                shipmentId: shipmentResult.shipmentId,
+                trackingNumber: shipmentResult.trackingReference,
+                labelUrl: shipmentResult.labelUrl,
+              });
+
+              await order.save();
+            }
+          } catch (shipmentError) {
+            console.error(`⚠️ Failed to create shipment for order ${order.orderNumber}:`, shipmentError.message);
+            // Don't fail payment verification if shipment creation fails
+            // The order has been marked as paid and processing, which is the important part
+            // Shipment can be retried manually or via a background job
+          }
+        } else if (order.fulfillmentOption === 'collection' || order.fulfillmentOption === 'pudo') {
+          console.log(`ℹ️ Order ${order.orderNumber} uses ${order.fulfillmentOption} fulfillment - skipping Shiplogic shipment creation`);
+        }
       }
     }
 
