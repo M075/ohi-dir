@@ -12,7 +12,7 @@ export const useMessages = () => {
     return {
       unreadCount: 0,
       loading: false,
-      refreshUnreadCount: () => {},
+      refreshUnreadCount: () => { },
     };
   }
   return context;
@@ -49,10 +49,10 @@ export const MessagesProvider = ({ children }) => {
   useEffect(() => {
     if (session?.user?.id) {
       fetchUnreadCount();
-      
-      // Poll for updates every 30 seconds
-      const interval = setInterval(fetchUnreadCount, 30000);
-      return () => clearInterval(interval);
+
+      // // Poll for updates every 30 seconds
+      // const interval = setInterval(fetchUnreadCount, 30000);
+      // return () => clearInterval(interval);
     } else {
       setUnreadCount(0);
     }

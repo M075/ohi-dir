@@ -12,6 +12,7 @@ import { toast } from '@/components/hooks/use-toast';
 import { Store, Package, CreditCard, Loader2, MapPin, Truck } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { searchAddresses, extractAddressComponents } from '@/utils/addressAutocomplete';
+import { calculateRequiredLockerSize, LOCKER_SIZES } from '@/utils/courierServices';
 
 const PAYFAST_STORAGE_KEY = 'payfast:lastPaymentId';
 const DEFAULT_SHIPPING_METHOD = 'standard';
@@ -25,11 +26,11 @@ export default function CheckoutPage() {
   const { cart, loading: cartLoading } = useCart();
   const { data: session, status } = useSession();
   const router = useRouter();
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [itemsBySeller, setItemsBySeller] = useState({});
   const [errors, setErrors] = useState({});
-  
+
   const [formData, setFormData] = useState({
     email: '',
     fullName: '',
@@ -232,11 +233,11 @@ export default function CheckoutPage() {
 
   const groupItemsBySeller = () => {
     const grouped = {};
-    
+
     cart.items.forEach(item => {
       const sellerId = item.product?.owner?._id || item.product?.owner || 'unknown';
       const sellerName = item.product?.ownerName || item.productSnapshot?.ownerName || 'Unknown Seller';
-      
+
       if (!grouped[sellerId]) {
         grouped[sellerId] = {
           sellerId,
@@ -245,11 +246,11 @@ export default function CheckoutPage() {
           subtotal: 0,
         };
       }
-      
+
       grouped[sellerId].items.push(item);
       grouped[sellerId].subtotal += item.price * item.quantity;
     });
-    
+
     setItemsBySeller(grouped);
   };
 
@@ -262,7 +263,7 @@ export default function CheckoutPage() {
     if (name === 'address') {
       setAddressSelectionLocked(false);
     }
-    
+
     // Clear error for this field
     clearFieldError(name);
   };
@@ -340,7 +341,8 @@ export default function CheckoutPage() {
 
   const normalizeLocker = (locker) => {
     if (!locker) return null;
-    const id = locker.id || locker.locker_id || locker.code || locker.identifier || `${locker.name || 'locker'}-${locker.postal_code || locker.postalCode || locker.city || Date.now()}`;
+    const pickupPointId = locker.pickupPointId || locker.pickup_point_id || locker.id || locker.locker_id || locker.code || locker.identifier;
+    const id = pickupPointId || `${locker.name || 'locker'}-${locker.postal_code || locker.postalCode || locker.city || Date.now()}`;
     const addressSource = typeof locker.address === 'object' ? locker.address : null;
     const citySource = toDisplayText(locker.city) || addressSource?.city || addressSource?.local_area;
     const provinceSource = toDisplayText(locker.province) || addressSource?.zone || addressSource?.province;
@@ -348,6 +350,8 @@ export default function CheckoutPage() {
 
     return {
       id,
+      pickupPointId: pickupPointId || id,
+      pickupPointProvider: locker.pickupPointProvider || locker.pickup_point_provider || 'tcg-locker',
       name: toDisplayText(locker.name || locker.site_name || locker.locker_name) || 'PUDO Locker',
       address:
         buildAddressString(locker.address) ||
@@ -466,7 +470,7 @@ export default function CheckoutPage() {
     const form = document.createElement('form');
     form.method = 'POST';
     form.action = action;
-    
+
     // Add all form fields as hidden inputs
     Object.entries(formData).forEach(([key, value]) => {
       const input = document.createElement('input');
@@ -475,7 +479,7 @@ export default function CheckoutPage() {
       input.value = value;
       form.appendChild(input);
     });
-    
+
     // Append form to body and submit
     document.body.appendChild(form);
     console.log('Submitting PayFast form with data:', formData);
@@ -484,10 +488,10 @@ export default function CheckoutPage() {
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!formData.email) newErrors.email = 'Email is required';
     else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = 'Email is invalid';
-    
+
     if (!formData.fullName) newErrors.fullName = 'Full name is required';
 
     if (shippingOption === 'door-to-door') {
@@ -501,14 +505,14 @@ export default function CheckoutPage() {
     if (shippingOption === 'pudo' && !selectedPudoLocker) {
       newErrors.selectedPudoLocker = 'Select a locker for your drop-off and collection';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!session?.user) {
       toast({
         title: "Error",
@@ -575,7 +579,9 @@ export default function CheckoutPage() {
       })();
 
       const shippingMethod = SHIPPING_METHOD_MAP[shippingOption] || DEFAULT_SHIPPING_METHOD;
-      const lockerSelection = shippingOption === 'pudo' ? selectedPudoLocker : null;
+      const computedLockerSize = cart?.items ? calculateRequiredLockerSize(cart.items) : 'M';
+      const computedLockerPrice = LOCKER_SIZES[computedLockerSize]?.price || 69;
+      const lockerSelection = shippingOption === 'pudo' && selectedPudoLocker ? { ...selectedPudoLocker, lockerSize: computedLockerSize, price: computedLockerPrice } : null;
 
       console.log('Submitting checkout with:', {
         shippingAddress,
@@ -587,16 +593,16 @@ export default function CheckoutPage() {
 
       const bestBySeller = shippingQuotes.data?.quotesBySeller
         ? Object.values(shippingQuotes.data.quotesBySeller).reduce((acc, seller) => {
-            if (seller?.sellerId && typeof seller?.bestQuote?.price === 'number') {
-              acc[seller.sellerId] = Number(seller.bestQuote.price);
-            }
-            return acc;
-          }, {})
+          if (seller?.sellerId && typeof seller?.bestQuote?.price === 'number') {
+            acc[seller.sellerId] = Number(seller.bestQuote.price);
+          }
+          return acc;
+        }, {})
         : undefined;
 
       const res = await fetch('/api/checkout', {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
         },
@@ -626,7 +632,7 @@ export default function CheckoutPage() {
         console.error('Checkout failed:', data);
         // Show detailed error if available
         if (data.details && Array.isArray(data.details)) {
-          const errorMessages = data.details.map(err => 
+          const errorMessages = data.details.map(err =>
             `${err.product || 'Item'}: ${err.error}`
           ).join('\n');
           throw new Error(`${data.error}\n\n${errorMessages}`);
@@ -694,7 +700,17 @@ export default function CheckoutPage() {
   const estimatedTotal = subtotal + taxes;
   const estimatedShipping = shippingQuotes.data?.summary?.estimatedShipping;
   const hasEstimatedShipping = shippingOption === 'door-to-door' && typeof estimatedShipping === 'number' && estimatedShipping > 0;
-  const totalWithEstimatedShipping = hasEstimatedShipping ? estimatedTotal + estimatedShipping : null;
+
+  const requiredLockerSize = cartItems ? calculateRequiredLockerSize(cartItems) : 'M';
+  const pudoShippingPrice = LOCKER_SIZES[requiredLockerSize]?.price || 69;
+
+  let totalWithEstimatedShipping = null;
+  if (hasEstimatedShipping) {
+    totalWithEstimatedShipping = estimatedTotal + estimatedShipping;
+  } else if (shippingOption === 'pudo') {
+    totalWithEstimatedShipping = estimatedTotal + pudoShippingPrice;
+  }
+
   const checkoutButtonTotal = totalWithEstimatedShipping ?? estimatedTotal;
   const sellerCount = Object.keys(itemsBySeller).length;
 
@@ -702,7 +718,7 @@ export default function CheckoutPage() {
     <div className="pb-12 sm:pb-0 min-h-screen bg-gray-50 dark:bg-zinc-900">
       <div className="max-w-7xl mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-8">Checkout</h1>
-        
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column - Forms */}
           <div className="lg:col-span-2 space-y-6">
@@ -808,9 +824,8 @@ export default function CheckoutPage() {
                     return (
                       <label
                         key={option.id}
-                        className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
-                          isSelected ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40' : 'hover:bg-gray-50 dark:hover:bg-zinc-800'
-                        } ${!option.available ? 'opacity-60 cursor-not-allowed' : ''}`}
+                        className={`flex items-start gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${isSelected ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40' : 'hover:bg-gray-50 dark:hover:bg-zinc-800'
+                          } ${!option.available ? 'opacity-60 cursor-not-allowed' : ''}`}
                       >
                         <input
                           type="radio"
@@ -909,11 +924,10 @@ export default function CheckoutPage() {
                               type="button"
                               key={locker.id}
                               onClick={() => handlePudoLockerSelect(locker)}
-                              className={`w-full text-left border rounded-lg p-3 transition-colors ${
-                                selectedPudoLocker?.id === locker.id
+                              className={`w-full text-left border rounded-lg p-3 transition-colors ${selectedPudoLocker?.id === locker.id
                                   ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40'
                                   : 'hover:bg-gray-50 dark:hover:bg-zinc-800'
-                              }`}
+                                }`}
                             >
                               <div className="flex items-start justify-between gap-2">
                                 <div>
@@ -1194,7 +1208,7 @@ export default function CheckoutPage() {
                         <Store className="h-4 w-4 text-emerald-600" />
                         <span className="font-semibold text-sm">{seller.sellerName}</span>
                       </div>
-                      
+
                       {seller.items.map((item) => (
                         <div key={item._id} className="flex gap-3">
                           <Image
@@ -1217,7 +1231,7 @@ export default function CheckoutPage() {
                           </div>
                         </div>
                       ))}
-                      
+
                       <div className="text-right text-sm">
                         <span className="text-muted-foreground">Seller Subtotal: </span>
                         <span className="font-semibold">R {seller.subtotal.toFixed(2)}</span>
@@ -1242,7 +1256,7 @@ export default function CheckoutPage() {
                           <span className="text-xs text-muted-foreground text-right">Live quote pending</span>
                         )
                       ) : shippingOption === 'pudo' ? (
-                        <span className="text-xs text-muted-foreground text-right">Locker courier billed after booking</span>
+                        <span>R {pudoShippingPrice.toFixed(2)} ({requiredLockerSize} Locker)</span>
                       ) : (
                         <span className="text-xs text-muted-foreground text-right">Collection - R 0.00</span>
                       )}
@@ -1251,9 +1265,9 @@ export default function CheckoutPage() {
                       <span className="text-muted-foreground">Tax (15% VAT)</span>
                       <span>R {taxes.toFixed(2)}</span>
                     </div>
-                    
+
                     <Separator />
-                    
+
                     <div className="flex justify-between text-lg font-bold">
                       <div>
                         Estimated total {
@@ -1263,7 +1277,7 @@ export default function CheckoutPage() {
                               : '(excl. shipping)'
                             : shippingOption === 'collection'
                               ? '(collection)'
-                              : '(locker courier billed separately)'
+                              : '(incl. locker shipping)'
                         }
                       </div>
                       <div>
@@ -1284,7 +1298,7 @@ export default function CheckoutPage() {
                 </CardContent>
               </Card>
 
-              <Button 
+              <Button
                 onClick={handleSubmit}
                 disabled={isSubmitting}
                 className="w-full h-12 text-lg"

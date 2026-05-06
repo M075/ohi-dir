@@ -1,13 +1,8 @@
-// app/api/courier/book/route.js
 import connectDB from '@/config/database';
 import Order from '@/models/Order';
 import { getSessionUser } from '@/utils/getSessionUser';
-import { CourierServiceManager } from '@/utils/courierServices';
-import {
-  normalizeAddress,
-  normalizeParcels,
-  buildParcelsFromOrder,
-} from '@/utils/courierHelpers';
+import { CourierServiceManager, createPUDOShipmentFromOrder } from '@/utils/courierServices';
+import { normalizeAddress, normalizeParcels, buildParcelsFromOrder } from '@/utils/courierHelpers';
 
 export async function POST(request) {
   try {
@@ -22,7 +17,15 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { orderId, provider, service, deliveryAddress, collectionAddress } = body;
+    const {
+      orderId,
+      provider,
+      service,
+      deliveryAddress,
+      collectionAddress,
+      collectionLocker,
+      lockerSize,
+    } = body;
 
     if (!provider || !service) {
       return new Response(
@@ -33,6 +36,7 @@ export async function POST(request) {
 
     const order = await Order.findById(orderId)
       .populate('seller', 'storename email phone address city province zipCode country');
+
     if (!order) {
       return new Response(
         JSON.stringify({ error: 'Order not found' }),
@@ -41,7 +45,7 @@ export async function POST(request) {
     }
 
     // Verify user is seller
-    if (order.seller.toString() !== sessionUser.userId) {
+    if ((order.seller?._id || order.seller).toString() !== sessionUser.userId) {
       return new Response(
         JSON.stringify({ error: 'Unauthorized - Only seller can book courier' }),
         { status: 403, headers: { 'Content-Type': 'application/json' } }
@@ -72,20 +76,6 @@ export async function POST(request) {
       }
     );
 
-    if (!normalizedCollectionAddress.address || !normalizedCollectionAddress.city || !normalizedCollectionAddress.postalCode) {
-      return new Response(
-        JSON.stringify({ error: 'Seller collection address is incomplete.' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    if (!normalizedDeliveryAddress.address || !normalizedDeliveryAddress.city || !normalizedDeliveryAddress.postalCode) {
-      return new Response(
-        JSON.stringify({ error: 'Buyer delivery address is incomplete.' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
     const collectionContact = {
       name: normalizedCollectionAddress.name || normalizedCollectionAddress.company || order.sellerName,
       email: normalizedCollectionAddress.email,
@@ -112,51 +102,112 @@ export async function POST(request) {
       );
     }
 
-    const fallbackDescription = `Order ${order.orderNumber}`;
-    const parcels = body.parcels?.length
-      ? normalizeParcels(body.parcels, fallbackDescription)
-      : buildParcelsFromOrder(order, fallbackDescription);
-
     const courierManager = new CourierServiceManager();
+    let shipment;
 
-    const shipmentData = {
-      orderNumber: order.orderNumber,
-      collectionAddress: normalizedCollectionAddress,
-      collectionContact,
-      deliveryAddress: normalizedDeliveryAddress,
-      deliveryContact,
-      parcels,
-      declaredValue: order.total,
-      collectionNotes: body.collectionNotes,
-      deliveryNotes: body.deliveryNotes,
-    };
+    // PUDO locker-to-locker shipment
+    if (provider === 'pudo' || order.fulfillmentOption === 'pudo') {
+      // Seller must provide collection locker (drop-off point)
+      if (!collectionLocker && !order.collectionLocker?.pickupPointId) {
+        return new Response(
+          JSON.stringify({ error: 'Collection locker is required for PUDO shipments. Please select a drop-off locker.' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
 
-    const shipment = await courierManager.createShipment(
-      provider,
-      shipmentData,
-      service
-    );
+      // Save collection locker to order if provided
+      if (collectionLocker) {
+        order.collectionLocker = {
+          lockerId: collectionLocker.id || collectionLocker.lockerId,
+          lockerName: collectionLocker.name || collectionLocker.lockerName || 'PUDO Locker',
+          lockerAddress: collectionLocker.address || '',
+          pickupPointId: collectionLocker.pickupPointId || collectionLocker.id || collectionLocker.lockerId,
+          pickupPointProvider: collectionLocker.pickupPointProvider || 'tcg-locker',
+        };
+      }
+
+      // Verify delivery locker exists on order (set by buyer at checkout)
+      if (!order.lockerDetails?.pickupPointId) {
+        return new Response(
+          JSON.stringify({ error: 'Delivery locker not found on order. Buyer must select a collection locker at checkout.' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const pudoShipmentData = {
+        orderNumber: order.orderNumber,
+        collectionLocker: order.collectionLocker,
+        deliveryLocker: {
+          pickupPointId: order.lockerDetails.pickupPointId,
+          pickupPointProvider: order.lockerDetails.pickupPointProvider || 'tcg-locker',
+          name: order.lockerDetails.lockerName,
+        },
+        collectionContact,
+        deliveryContact,
+        declaredValue: 0,
+        collectionDate: new Date(),
+        deliveryDate: order.estimatedDelivery,
+        lockerSize: lockerSize || 'M',
+        service_level_code: service.service_level_code || 'L2LM - ECO',
+      };
+
+      shipment = await courierManager.createShipment('pudo', pudoShipmentData, {
+        ...service,
+        lockerSize: lockerSize || 'M',
+        service_level_code: service.service_level_code || 'L2LM - ECO',
+      });
+    } else {
+      // Standard door-to-door shipment - validate addresses
+      if (!normalizedCollectionAddress.address || !normalizedCollectionAddress.city || !normalizedCollectionAddress.postalCode) {
+        return new Response(
+          JSON.stringify({ error: 'Seller collection address is incomplete.' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!normalizedDeliveryAddress.address || !normalizedDeliveryAddress.city || !normalizedDeliveryAddress.postalCode) {
+        return new Response(
+          JSON.stringify({ error: 'Buyer delivery address is incomplete.' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const fallbackDescription = `Order ${order.orderNumber}`;
+      const parcels = body.parcels?.length
+        ? normalizeParcels(body.parcels, fallbackDescription)
+        : buildParcelsFromOrder(order, fallbackDescription);
+
+      const shipmentData = {
+        orderNumber: order.orderNumber,
+        collectionAddress: normalizedCollectionAddress,
+        collectionContact,
+        deliveryAddress: normalizedDeliveryAddress,
+        deliveryContact,
+        parcels,
+        declaredValue: order.total,
+        collectionNotes: body.collectionNotes,
+        deliveryNotes: body.deliveryNotes,
+      };
+
+      shipment = await courierManager.createShipment(provider, shipmentData, service);
+    }
 
     // Update order with courier info
     order.courierProvider = provider;
-    order.trackingNumber = shipment.tracking_number || shipment.label_id;
-    order.courierReference = shipment.reference;
+    order.trackingNumber = shipment.tracking_number || shipment.label_id || shipment.short_tracking_reference;
+    order.courierReference = shipment.reference || shipment.id;
     order.status = 'shipped';
     order.shippedAt = new Date();
     order.statusHistory.push({
       status: 'shipped',
       timestamp: new Date(),
-      note: `Shipped via ${provider}`,
+      note: `Shipped via ${provider}${provider === 'pudo' ? ' (PUDO Locker)' : ''}`,
     });
 
     await order.save();
 
     return new Response(
-      JSON.stringify({ 
-        success: true,
-        order,
-        shipment 
-      }),
+      JSON.stringify({ success: true, order, shipment }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
@@ -167,4 +218,3 @@ export async function POST(request) {
     );
   }
 }
-

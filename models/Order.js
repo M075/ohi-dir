@@ -86,6 +86,10 @@ const CourierQuoteSchema = new Schema({
   raw: Schema.Types.Mixed,
 }, { _id: false });
 
+/**
+ * Delivery locker details (selected by buyer at checkout)
+ * This is the locker where the buyer will collect their parcel
+ */
 const LockerDetailsSchema = new Schema({
   provider: String,
   lockerId: String,
@@ -96,6 +100,29 @@ const LockerDetailsSchema = new Schema({
   senderPin: String,
   recipientPin: String,
   expiresAt: Date,
+  pickupPointId: String,
+  pickupPointProvider: {
+    type: String,
+    default: 'tcg-locker',
+  },
+  lockerSize: String,
+  serviceCode: String,
+  price: Number,
+}, { _id: false });
+
+/**
+ * Collection locker details (selected by seller when booking PUDO shipment)
+ * This is the locker where the seller drops off the parcel
+ */
+const CollectionLockerSchema = new Schema({
+  lockerId: String,
+  lockerName: String,
+  lockerAddress: String,
+  pickupPointId: String,
+  pickupPointProvider: {
+    type: String,
+    default: 'tcg-locker',
+  },
 }, { _id: false });
 
 const ShippingAddressSchema = new Schema({
@@ -119,9 +146,9 @@ const ShippingAddressSchema = new Schema({
     required: true,
   },
   zipCode: String,
-  country: { 
-    type: String, 
-    default: 'South Africa' 
+  country: {
+    type: String,
+    default: 'South Africa'
   },
 });
 
@@ -138,7 +165,7 @@ const OrderSchema = new Schema(
       type: String,
       required: [true, 'Buyer email is required'],
     },
-    
+
     // REQUIRED: Seller information
     seller: {
       type: Schema.Types.ObjectId,
@@ -150,14 +177,14 @@ const OrderSchema = new Schema(
       type: String,
       required: [true, 'Seller name is required'],
     },
-    
+
     // Order identification
     orderNumber: {
       type: String,
       unique: true,
       sparse: true, // Allow multiple null values during creation
     },
-    
+
     // Order items (all from same seller in this order)
     items: {
       type: [OrderItemSchema],
@@ -169,7 +196,7 @@ const OrderSchema = new Schema(
         message: 'Order must have at least one item'
       }
     },
-    
+
     // Pricing (REQUIRED)
     subtotal: {
       type: Number,
@@ -192,7 +219,7 @@ const OrderSchema = new Schema(
       required: [true, 'Total is required'],
       min: 0,
     },
-    
+
     // Shipping (REQUIRED)
     shippingAddress: {
       type: ShippingAddressSchema,
@@ -212,14 +239,20 @@ const OrderSchema = new Schema(
     sellerAddressSnapshot: AddressSnapshotSchema,
     parcelSummary: ParcelSummarySchema,
     courierQuote: CourierQuoteSchema,
+
+    // Delivery locker (buyer's collection locker, selected at checkout)
     lockerDetails: LockerDetailsSchema,
+
+    // Collection locker (seller's drop-off locker, selected when booking PUDO shipment)
+    collectionLocker: CollectionLockerSchema,
+
     courierSandbox: {
       type: Boolean,
       default: false,
     },
     deliveryInstructions: String,
     pickupInstructions: String,
-    
+
     // Payment (REQUIRED)
     paymentMethod: {
       type: String,
@@ -238,7 +271,7 @@ const OrderSchema = new Schema(
       paidAt: Date,
       manuallyMarkedBy: Schema.Types.ObjectId,
     },
-    
+
     // Order Status
     status: {
       type: String,
@@ -246,24 +279,24 @@ const OrderSchema = new Schema(
       default: 'pending',
       index: true,
     },
-    
+
     // Status timestamps
     confirmedAt: Date,
     shippedAt: Date,
     deliveredAt: Date,
     cancelledAt: Date,
-    
+
     // Tracking
     trackingNumber: String,
     trackingUrl: String,
-    
+
     // Courier information
     courierProvider: {
       type: String,
       enum: ['courier-guy', 'shiplogic', 'fastway', 'pudo', null],
     },
     courierReference: String,
-    
+
     // Status history
     statusHistory: [{
       status: String,
@@ -273,11 +306,11 @@ const OrderSchema = new Schema(
       },
       note: String,
     }],
-    
+
     // Notes
     customerNotes: String,
     sellerNotes: String,
-    
+
     // Cancellation
     cancellationReason: String,
   },
@@ -294,27 +327,27 @@ OrderSchema.pre('validate', async function(next) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
-    
+
     // Try up to 10 times to generate a unique order number
     let attempts = 0;
     let orderNumber = null;
-    
+
     while (attempts < 10) {
       const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
       orderNumber = `ORD-${year}${month}${day}-${random}`;
-      
+
       // Check if this order number already exists
       const existing = await mongoose.models.Order.findOne({ orderNumber });
-      
+
       if (!existing) {
         this.orderNumber = orderNumber;
         console.log(`✅ Generated order number: ${orderNumber}`);
         break;
       }
-      
+
       attempts++;
     }
-    
+
     if (!this.orderNumber) {
       // Fallback: use MongoDB ObjectId as part of the order number
       const objectIdPart = this._id.toString().slice(-8);
@@ -330,7 +363,7 @@ OrderSchema.pre('save', function(next) {
   if (this.isModified('status') && !this.isNew) {
     // Don't add duplicate history entries
     const lastHistoryStatus = this.statusHistory[this.statusHistory.length - 1]?.status;
-    
+
     if (lastHistoryStatus !== this.status) {
       this.statusHistory.push({
         status: this.status,

@@ -225,6 +225,11 @@ export async function POST(request) {
         lockerAddress: lockerSelection.address || normalizedAddress.address,
         distanceKm: lockerSelection.distanceKm ?? lockerSelection.distance ?? null,
         status: lockerSelection.status || 'pending',
+        pickupPointId: lockerSelection.pickupPointId || lockerSelection.id || lockerSelection.lockerId || lockerSelection.lockerID,
+        pickupPointProvider: lockerSelection.pickupPointProvider || 'tcg-locker',
+        lockerSize: lockerSelection.lockerSize || 'M',
+        serviceCode: lockerSelection.serviceCode || 'L2LM - ECO',
+        price: lockerSelection.price || 69,
       };
     } else if (fulfillmentOption === 'collection') {
       normalizedAddress.address = normalizedAddress.address || 'Collection - buyer to arrange pickup';
