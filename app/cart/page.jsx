@@ -231,10 +231,12 @@ export default function CartPage() {
                         Calculated at checkout
                       </dd>
                     </div>
-                    <div className="flex items-center justify-between py-4">
-                      <dt className="text-gray-600 dark:text-gray-400">Tax (15% VAT)</dt>
-                      <dd className="font-medium">R {tax.toFixed(2)}</dd>
-                    </div>
+                    {tax > 0 && (
+                      <div className="flex items-center justify-between py-4">
+                        <dt className="text-gray-600 dark:text-gray-400">Tax (15% VAT)</dt>
+                        <dd className="font-medium">R {tax.toFixed(2)}</dd>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between py-4">
                       <dt className="text-base font-medium">Estimated total (excl. shipping)</dt>
                       <dd className="text-base font-medium">R {estimatedTotal.toFixed(2)}</dd>

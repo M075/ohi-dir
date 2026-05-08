@@ -1261,10 +1261,12 @@ export default function CheckoutPage() {
                         <span className="text-xs text-muted-foreground text-right">Collection - R 0.00</span>
                       )}
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Tax (15% VAT)</span>
-                      <span>R {taxes.toFixed(2)}</span>
-                    </div>
+                    {taxes > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Tax (15% VAT)</span>
+                        <span>R {taxes.toFixed(2)}</span>
+                      </div>
+                    )}
 
                     <Separator />
 

@@ -11,9 +11,9 @@ import { Grid3x3, List } from 'lucide-react';
 // Props:
 // - products: array of product objects
 // - renderResults?: optional function(filteredProducts) -> JSX to render results (default: grid of ProductCard)
-export default function FilterAndSort({ products = [], renderResults }) {
+export default function FilterAndSort({ products = [], renderResults, initialCategory = 'all' }) {
   const [query, setQuery] = React.useState('');
-  const [category, setCategory] = React.useState('all');
+  const [category, setCategory] = React.useState(initialCategory);
   const [sort, setSort] = React.useState('latest');
   const [viewMode, setViewMode] = React.useState('grid');
 

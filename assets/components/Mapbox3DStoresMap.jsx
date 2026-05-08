@@ -170,7 +170,7 @@ export default function Mapbox3DStoresMap({ stores = [], onStoreSelect }) {
       el.className = 'mapbox-3d-marker';
       el.innerHTML = `
         <div class="marker-pin">
-          <svg width="40" height="50" viewBox="0 0 40 50" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <svg width="30" height="38" viewBox="0 0 40 50" fill="none" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <filter id="shadow-${store._id}" x="-50%" y="-50%" width="200%" height="200%">
                 <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/>
@@ -187,8 +187,8 @@ export default function Mapbox3DStoresMap({ stores = [], onStoreSelect }) {
           </svg>
         </div>
       `;
-      el.style.width = '40px';
-      el.style.height = '50px';
+      el.style.width = '30px';
+      el.style.height = '38px';
       el.style.cursor = 'pointer';
 
       el.addEventListener('mouseenter', () => {

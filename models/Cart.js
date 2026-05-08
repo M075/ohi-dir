@@ -59,14 +59,24 @@ const CartSchema = new Schema(
 );
 
 // Calculate totals before saving
-CartSchema.pre('save', function(next) {
+CartSchema.pre('save', async function(next) {
   // Calculate subtotal
   this.subtotal = this.items.reduce((total, item) => {
     return total + (item.price * item.quantity);
   }, 0);
   
-  // Calculate tax (15% VAT for South Africa)
-  this.tax = this.subtotal * 0.15;
+  try {
+    const Setting = mongoose.models.Setting || mongoose.model('Setting');
+    const settings = await Setting.findOne();
+    const taxEnabled = settings ? settings.taxEnabled : true;
+    
+    // Calculate tax (15% VAT for South Africa) if enabled
+    this.tax = taxEnabled ? this.subtotal * 0.15 : 0;
+  } catch (err) {
+    // Fallback to applying tax if error occurs fetching settings
+    console.error('Error fetching tax setting in Cart pre-save:', err);
+    this.tax = this.subtotal * 0.15;
+  }
   
   // Calculate shipping (free over R500, otherwise R50)
   this.shipping = this.subtotal > 500 ? 0 : 50;

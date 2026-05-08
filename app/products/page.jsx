@@ -1,5 +1,6 @@
 "use client";
-import React from "react";
+import React, { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import Loading from "@/app/loading";
 import { useProducts } from "@/assets/hooks/useProductsHook";
 import FilterAndSort from "@/assets/components/ProductFilterAndSort";
@@ -7,8 +8,10 @@ import ShopByCategory from "@/assets/components/ShopByCategory";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-const ProductsPage = () => {
+function ProductsContent() {
+  const searchParams = useSearchParams();
   const { products, loading, error } = useProducts();
+  const initialCategory = searchParams.get("category") || "all";
 
   if (loading) return <Loading />;
   if (error) return <div>Error: {error}</div>;
@@ -64,7 +67,7 @@ const ProductsPage = () => {
           </a>
         </div>
 
-        <FilterAndSort products={products} />
+        <FilterAndSort products={products} initialCategory={initialCategory} />
 
         <div className="mt-8 text-sm md:hidden">
           <a href="/stores" className="font-medium text-emerald-600 hover:text-emerald-500">
@@ -75,6 +78,12 @@ const ProductsPage = () => {
       </div>
     </section>
   );
-};
+}
+
+const ProductsPage = () => (
+  <Suspense fallback={<Loading />}>
+    <ProductsContent />
+  </Suspense>
+);
 
 export default ProductsPage;

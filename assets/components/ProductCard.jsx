@@ -70,7 +70,7 @@ const ProductCard = ({ product }) => {
         </Link>
       </h3>
       
-      {(product?.rating > 0 || product?.review.length > 0) && (
+      {(product?.rating > 0 || product?.review?.length > 0) && (
         <div className="mt-1 flex items-center">
           {[0, 1, 2, 3, 4]. map((rating) => (
             <StarIcon

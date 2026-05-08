@@ -5,6 +5,7 @@ import Order from '@/models/Order';
 import Cart from '@/models/Cart';
 import User from '@/models/User';
 import Product from '@/models/Product';
+import Setting from '@/models/Setting';
 import { getSessionUser } from '@/utils/getSessionUser';
 import { calculateShipping, estimateDelivery, validateShippingAddress, getAvailableShippingMethods } from '@/utils/shipping';
 import { createPayFastPayment } from '@/utils/payfast';
@@ -358,6 +359,10 @@ export async function POST(request) {
 
     console.log(`📊 Orders grouped by ${Object.keys(ordersBySeller).length} seller(s)`);
 
+    // Fetch tax setting
+    const settings = await Setting.findOne();
+    const taxEnabled = settings ? settings.taxEnabled : true;
+
     // Create separate orders for each seller using a transaction
     mongoSession = await mongoose.startSession();
     const createdOrders = [];
@@ -383,7 +388,7 @@ export async function POST(request) {
             );
           })();
 
-          const tax = orderData.subtotal * 0.15; // 15% VAT
+          const tax = taxEnabled ? orderData.subtotal * 0.15 : 0; // 15% VAT conditionally
           const total = orderData.subtotal + shippingCost + tax;
 
           console.log(`💰 Order total: R${total.toFixed(2)} (subtotal: R${orderData.subtotal.toFixed(2)}, shipping: R${shippingCost.toFixed(2)}, tax: R${tax.toFixed(2)})`);
