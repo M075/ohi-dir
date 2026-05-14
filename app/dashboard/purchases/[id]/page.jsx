@@ -25,12 +25,63 @@ export default function PurchaseDetailPage() {
   const router = useRouter();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [trackingStatus, setTrackingStatus] = useState("");
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     if (params.id) {
       fetchOrder();
     }
   }, [params.id]);
+
+  useEffect(() => {
+    if (order?.trackingNumber) {
+      fetchTracking();
+    }
+  }, [order?.trackingNumber]);
+
+  const fetchTracking = async () => {
+    try {
+      const res = await fetch(`/api/orders/${params.id}/track`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.tracking?.status) {
+          setTrackingStatus(data.tracking.status);
+        } else if (data?.tracking?.state) {
+          setTrackingStatus(data.tracking.state);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch tracking details:", error);
+    }
+  };
+
+  const handleConfirmDelivery = async () => {
+    try {
+      setUpdating(true);
+      const res = await fetch(`/api/orders/${params.id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "delivered" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to confirm delivery");
+      
+      toast({
+        title: "Delivery Confirmed",
+        description: "The order has been marked as delivered and funds released.",
+      });
+      fetchOrder();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setUpdating(false);
+    }
+  };
 
   const fetchOrder = async () => {
     try {
@@ -152,9 +203,26 @@ export default function PurchaseDetailPage() {
             </div>
 
             {order.trackingNumber && (
-              <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <p className="text-sm font-medium mb-1">Tracking Number</p>
-                <p className="font-mono text-lg">{order.trackingNumber}</p>
+              <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <Link href={`https://portal.thecourierguy.co.za/track?ref=${order.trackingNumber}`} target="_blank" className="font-mono text-lg text-blue-600 dark:text-blue-400 hover:underline">
+                    <p className="text-sm font-medium mb-1 text-foreground">Tracking Number: {order.trackingNumber}</p>
+                  </Link>
+                  {trackingStatus && (
+                    <p className="text-sm font-medium mt-2">
+                      Live Status: <span className="uppercase text-blue-700 dark:text-blue-300">{trackingStatus}</span>
+                    </p>
+                  )}
+                </div>
+                {order.status !== 'cancelled' && (
+                  <Button 
+                    onClick={handleConfirmDelivery} 
+                    disabled={updating || order.status === 'delivered'}
+                    className="shrink-0"
+                  >
+                    {order.status === 'delivered' ? "Delivery Confirmed" : updating ? "Confirming..." : "Confirm Delivery"}
+                  </Button>
+                )}
               </div>
             )}
           </CardContent>

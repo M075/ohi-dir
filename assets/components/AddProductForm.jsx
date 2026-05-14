@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, Edit2, PlusCircle, Upload, X } from "lucide-react";
 import { useSession } from "next-auth/react";
+import { PRODUCT_CATEGORIES } from "@/utils/categories";
 
 // Importing UI components from a custom UI library
 import { Badge } from "@/components/ui/badge";
@@ -528,26 +529,11 @@ const AddProductForm = () => {
                           />
                         </SelectTrigger>
                         <SelectContent data-oid="v98.u-0">
-                          <SelectItem value="Fashion & Apparel">Fashion & Apparel</SelectItem>
-                          <SelectItem value="Footwear & Accessories">Footwear & Accessories</SelectItem>
-                          <SelectItem value="Jewelry & Watches">Jewelry & Watches</SelectItem>
-                          <SelectItem value="Beauty & Personal Care">Beauty & Personal Care</SelectItem>
-                          <SelectItem value="Health & Wellness">Health & Wellness</SelectItem>
-                          <SelectItem value="Devices & Electronics">Devices & Electronics</SelectItem>
-                          <SelectItem value="Computers & Accessories">Computers & Accessories</SelectItem>
-                          <SelectItem value="Home & Living">Home & Living</SelectItem>
-                          <SelectItem value="Kitchen & Dining">Kitchen & Dining</SelectItem>
-                          <SelectItem value="Furniture & Decor">Furniture & Decor</SelectItem>
-                          <SelectItem value="Sports & Outdoors">Sports & Outdoors</SelectItem>
-                          <SelectItem value="Fitness & Training">Fitness & Training</SelectItem>
-                          <SelectItem value="Books & Stationery">Books & Stationery</SelectItem>
-                          <SelectItem value="Toys & Games">Toys & Games</SelectItem>
-                          <SelectItem value="Infants & Toddlers">Infants & Toddlers</SelectItem>
-                          <SelectItem value="Kids & Teens">Kids & Teens</SelectItem>
-                          <SelectItem value="Pets & Supplies">Pets & Supplies</SelectItem>
-                          <SelectItem value="Automotive & Tools">Automotive & Tools</SelectItem>
-                          <SelectItem value="Garden & Outdoor Living">Garden & Outdoor Living</SelectItem>
-                          <SelectItem value="Groceries & Essentials">Groceries & Essentials</SelectItem>
+                          {PRODUCT_CATEGORIES.map((cat) => (
+                            <SelectItem key={cat.value} value={cat.value}>
+                              {cat.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       {errors.category && (

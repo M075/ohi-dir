@@ -359,6 +359,13 @@ export async function POST(request) {
 
     console.log(`📊 Orders grouped by ${Object.keys(ordersBySeller).length} seller(s)`);
 
+    if (Object.keys(ordersBySeller).length > 1) {
+      return jsonResponse({
+        error: 'Multi-seller checkout is not supported',
+        message: 'You have items from multiple sellers in your cart. Checkout is currently limited to one seller at a time. Please make separate orders.'
+      }, 400);
+    }
+
     // Fetch tax setting
     const settings = await Setting.findOne();
     const taxEnabled = settings ? settings.taxEnabled : true;
@@ -372,9 +379,15 @@ export async function POST(request) {
         for (const [sellerId, orderData] of Object.entries(ordersBySeller)) {
           console.log(`📝 Creating order for seller: ${orderData.sellerName}`);
           
+          let selectedCourierQuote = null;
+
           // Calculate costs for this seller's order
           const shippingCost = (() => {
             const clientBest = clientShippingQuotes?.bestBySeller?.[sellerId];
+            if (clientBest && typeof clientBest === 'object' && typeof clientBest.price === 'number') {
+              selectedCourierQuote = clientBest;
+              return clientBest.price;
+            }
             if (typeof clientBest === 'number' && !Number.isNaN(clientBest)) {
               return clientBest;
             }
@@ -426,6 +439,7 @@ export async function POST(request) {
             },
             sellerAddressSnapshot: orderData.sellerAddress,
             parcelSummary: summarizeParcels(orderData.parcels),
+            courierQuote: selectedCourierQuote ? { ...selectedCourierQuote } : undefined,
             
             // Shipping method
             shippingMethod: resolvedShippingMethod,

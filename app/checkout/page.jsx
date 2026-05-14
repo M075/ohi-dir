@@ -57,6 +57,7 @@ export default function CheckoutPage() {
   const [pudoSearchTerm, setPudoSearchTerm] = useState('');
   const [pudoLockers, setPudoLockers] = useState({ status: 'idle', data: [], error: null });
   const [selectedPudoLocker, setSelectedPudoLocker] = useState(null);
+  const [selectedQuote, setSelectedQuote] = useState(null);
 
   const clearFieldError = (field) => {
     setErrors(prev => {
@@ -593,8 +594,11 @@ export default function CheckoutPage() {
 
       const bestBySeller = shippingQuotes.data?.quotesBySeller
         ? Object.values(shippingQuotes.data.quotesBySeller).reduce((acc, seller) => {
-          if (seller?.sellerId && typeof seller?.bestQuote?.price === 'number') {
-            acc[seller.sellerId] = Number(seller.bestQuote.price);
+          if (seller?.sellerId) {
+            const activeQuote = selectedQuote || seller.bestQuote;
+            if (activeQuote) {
+              acc[seller.sellerId] = activeQuote;
+            }
           }
           return acc;
         }, {})
@@ -698,7 +702,17 @@ export default function CheckoutPage() {
   const subtotal = cart.subtotal || 0;
   const taxes = cart.tax || 0;
   const estimatedTotal = subtotal + taxes;
-  const estimatedShipping = shippingQuotes.data?.summary?.estimatedShipping;
+  let estimatedShipping = shippingQuotes.data?.summary?.estimatedShipping;
+  
+  if (selectedQuote?.price) {
+    estimatedShipping = Number(selectedQuote.price);
+  } else if (shippingQuotes.data?.quotesBySeller) {
+    // If no selection yet but quotes exist, use the best quote of the single seller
+    const sellerKey = Object.keys(shippingQuotes.data.quotesBySeller)[0];
+    const bestQuote = shippingQuotes.data.quotesBySeller[sellerKey]?.bestQuote;
+    if (bestQuote?.price) estimatedShipping = Number(bestQuote.price);
+  }
+
   const hasEstimatedShipping = shippingOption === 'door-to-door' && typeof estimatedShipping === 'number' && estimatedShipping > 0;
 
   const requiredLockerSize = cartItems ? calculateRequiredLockerSize(cartItems) : 'M';
@@ -722,16 +736,22 @@ export default function CheckoutPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column - Forms */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Multi-Vendor Notice */}
+            {/* Multi-Vendor Error */}
             {sellerCount > 1 && (
-              <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-800">
+              <Alert variant="destructive">
                 <Store className="h-4 w-4" />
                 <AlertDescription>
-                  You're ordering from {sellerCount} different sellers. Separate orders will be created for each seller.
+                  You have items from {sellerCount} different sellers in your cart. Checkout is currently limited to one seller at a time. Please remove items from other sellers to proceed, or make separate orders.
                 </AlertDescription>
               </Alert>
             )}
 
+            {sellerCount > 1 ? (
+               <div className="text-center py-8">
+                 <Button onClick={() => router.push('/cart')}>Return to Cart</Button>
+               </div>
+            ) : (
+              <>
             {/* Contact Information */}
             <Card>
               <CardHeader>
@@ -1114,31 +1134,64 @@ export default function CheckoutPage() {
                     )}
 
                     {shippingQuotes.status === 'success' && shippingQuotes.data && (
-                      <div className="space-y-3">
+                      <div className="space-y-4">
                         {Object.values(shippingQuotes.data.quotesBySeller || {}).map((seller) => (
-                          <div key={seller.sellerId} className="border rounded-lg p-3">
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="font-medium text-sm">{seller.sellerName}</p>
-                                {seller.bestQuote ? (
-                                  <p className="text-xs text-muted-foreground">
-                                    {seller.bestQuote.name || seller.bestQuote.provider} • {seller.bestQuote.service_level || seller.bestQuote.service_level_code || 'Standard'}
-                                  </p>
-                                ) : (
-                                  <p className="text-xs text-muted-foreground">No live quote available yet</p>
+                          <div key={seller.sellerId} className="space-y-3">
+                            <p className="font-medium text-sm text-muted-foreground">Available Courier Options</p>
+                            {seller.quotes && seller.quotes.length > 0 ? (
+                              <div className="space-y-2">
+                                {seller.quotes.map((quote, idx) => {
+                                  // Determine if this quote is selected. Default to cheapest (bestQuote) if none selected.
+                                  const isSelected = selectedQuote 
+                                    ? selectedQuote.service_level_code === quote.service_level_code && selectedQuote.provider === quote.provider
+                                    : seller.bestQuote?.service_level_code === quote.service_level_code && seller.bestQuote?.provider === quote.provider;
+
+                                  return (
+                                    <label
+                                      key={`${quote.provider}-${quote.service_level_code}-${idx}`}
+                                      className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${
+                                        isSelected 
+                                          ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40' 
+                                          : 'hover:bg-gray-50 dark:hover:bg-zinc-800'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-3">
+                                        <input
+                                          type="radio"
+                                          name={`shipping-${seller.sellerId}`}
+                                          checked={isSelected}
+                                          onChange={() => setSelectedQuote(quote)}
+                                          className="mt-0.5"
+                                        />
+                                        <div>
+                                          <p className="font-medium text-sm">
+                                            {quote.name || quote.provider}
+                                          </p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {/* {quote.service_level || quote.service_level_code || 'Standard'} */}
+                                            {quote.estimatedDays ? ` • ~${quote.estimatedDays} days` : ''}
+                                          </p>
+                                          {quote.description && (
+                                            <p className="text-[11px] text-muted-foreground/80 mt-0.5 leading-snug">
+                                              {quote.description}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="text-sm font-semibold">R{(quote.price ?? 0).toFixed(2)}</p>
+                                      </div>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="border rounded-lg p-3">
+                                <p className="text-sm text-muted-foreground">No live quotes available yet</p>
+                                {seller.error && (
+                                  <p className="text-xs text-red-500 mt-1">{seller.error}</p>
                                 )}
                               </div>
-                              {seller.bestQuote && (
-                                <div className="text-right">
-                                  <p className="text-sm font-semibold">From R{(seller.bestQuote.price ?? 0).toFixed(2)}</p>
-                                  {seller.bestQuote.estimatedDays && (
-                                    <p className="text-xs text-muted-foreground">~ {seller.bestQuote.estimatedDays} days</p>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                            {seller.error && (
-                              <p className="text-xs text-red-500 mt-2">{seller.error}</p>
                             )}
                           </div>
                         ))}
@@ -1191,6 +1244,8 @@ export default function CheckoutPage() {
                 />
               </CardContent>
             </Card>
+            </>
+            )}
           </div>
 
           {/* Right Column - Order Summary */}
@@ -1300,13 +1355,15 @@ export default function CheckoutPage() {
                 </CardContent>
               </Card>
 
-              <Button
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-                className="w-full h-12 text-lg"
-              >
-                {isSubmitting ? 'Processing...' : `Complete Order (R${checkoutButtonTotal.toFixed(2)})`}
-              </Button>
+              {sellerCount <= 1 && (
+                <Button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  className="w-full h-12 text-lg"
+                >
+                  {isSubmitting ? 'Processing...' : `Complete Order (R${checkoutButtonTotal.toFixed(2)})`}
+                </Button>
+              )}
 
               <p className="text-center text-xs text-muted-foreground">
                 By placing your order, you agree to our terms and conditions

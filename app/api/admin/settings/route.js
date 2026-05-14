@@ -23,7 +23,7 @@ export async function GET(request) {
     // Find the first settings document or create one if it doesn't exist
     let settings = await Setting.findOne();
     if (!settings) {
-      settings = await Setting.create({ taxEnabled: true });
+      settings = await Setting.create({ taxEnabled: true, commissionPercentage: 15 });
     }
 
     return jsonResponse(settings);
@@ -45,7 +45,7 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { taxEnabled } = body;
+    const { taxEnabled, commissionPercentage } = body;
 
     let settings = await Setting.findOne();
     if (!settings) {
@@ -54,6 +54,11 @@ export async function POST(request) {
 
     if (typeof taxEnabled === 'boolean') {
       settings.taxEnabled = taxEnabled;
+    }
+
+    if (typeof commissionPercentage === 'number') {
+      // Clamp between 0 and 100
+      settings.commissionPercentage = Math.min(100, Math.max(0, commissionPercentage));
     }
 
     await settings.save();

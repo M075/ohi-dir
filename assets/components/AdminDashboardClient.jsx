@@ -1,7 +1,7 @@
 // assets/components/AdminDashboardClient.jsx
 "use client";
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,6 +23,9 @@ import {
   CheckCircle,
   XCircle,
   Truck,
+  Percent,
+  Box,
+  Lock,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -34,6 +37,7 @@ const StatsCard = ({ title, value, icon: Icon, color = "emerald", trend }) => {
     purple: "text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30",
     orange: "text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30",
     red: "text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30",
+    indigo: "text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/30",
   };
 
   return (
@@ -59,6 +63,14 @@ const StatsCard = ({ title, value, icon: Icon, color = "emerald", trend }) => {
   );
 };
 
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-ZA', {
+    style: 'currency',
+    currency: 'ZAR',
+    minimumFractionDigits: 2,
+  }).format(amount || 0);
+};
+
 export default function AdminDashboardClient() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -70,10 +82,17 @@ export default function AdminDashboardClient() {
     pendingOrders: 0,
     totalRevenue: 0,
     activeStores: 0,
+    platformCommission: 0,
+    sellerEarnings: 0,
+    taxCollected: 0,
   });
   const [recentOrders, setRecentOrders] = useState([]);
   const [recentUsers, setRecentUsers] = useState([]);
   const [flaggedProducts, setFlaggedProducts] = useState([]);
+  const [shippingBreakdown, setShippingBreakdown] = useState({
+    courierGuy: { count: 0, total: 0 },
+    pudo: { count: 0, total: 0 },
+  });
 
   useEffect(() => {
     fetchDashboardData();
@@ -89,6 +108,9 @@ export default function AdminDashboardClient() {
         setRecentOrders(data.recentOrders);
         setRecentUsers(data.recentUsers);
         setFlaggedProducts(data.flaggedProducts);
+        if (data.shippingBreakdown) {
+          setShippingBreakdown(data.shippingBreakdown);
+        }
       }
     } catch (error) {
       console.error("Error fetching admin data:", error);
@@ -160,29 +182,128 @@ export default function AdminDashboardClient() {
             value={stats.totalUsers}
             icon={Users}
             color="emerald"
-            trend="+12%"
           />
           <StatsCard
             title="Active Stores"
             value={stats.activeStores}
             icon={ShoppingCart}
             color="blue"
-            trend="+8%"
           />
           <StatsCard
             title="Total Products"
             value={stats.totalProducts}
             icon={Package}
             color="purple"
-            trend="+15%"
           />
           <StatsCard
             title="Total Revenue"
-            value={`R ${stats.totalRevenue.toFixed(2)}`}
+            value={formatCurrency(stats.totalRevenue)}
             icon={TrendingUp}
             color="orange"
-            trend="+23%"
           />
+        </div>
+
+        {/* Platform Commission & Earnings Row */}
+        <div className="grid gap-4 md:grid-cols-3">
+          <StatsCard
+            title="Platform Commission"
+            value={formatCurrency(stats.platformCommission)}
+            icon={Percent}
+            color="emerald"
+          />
+          <StatsCard
+            title="Seller Earnings"
+            value={formatCurrency(stats.sellerEarnings)}
+            icon={TrendingUp}
+            color="blue"
+          />
+          <StatsCard
+            title="Tax Collected"
+            value={formatCurrency(stats.taxCollected)}
+            icon={Package}
+            color="purple"
+          />
+        </div>
+
+        {/* Shipping Costs Section */}
+        <div>
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <Truck className="h-5 w-5 text-muted-foreground" />
+            Shipping Costs
+          </h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Courier Guy (Door to Door) */}
+            <Card className="border-0 shadow-sm overflow-hidden">
+              <div className="h-1 bg-blue-500" />
+              <CardHeader className="flex flex-row items-start justify-between pb-2">
+                <div className="space-y-1">
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Truck className="h-5 w-5 text-blue-600" />
+                    Courier Guy
+                  </CardTitle>
+                  <CardDescription>Door to Door Deliveries</CardDescription>
+                </div>
+                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                  <Box className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                  {formatCurrency(shippingBreakdown.courierGuy.total)}
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Total Shipments</span>
+                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
+                    {shippingBreakdown.courierGuy.count} shipments
+                  </Badge>
+                </div>
+                {shippingBreakdown.courierGuy.count > 0 && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Avg per Shipment</span>
+                    <span className="font-medium">
+                      {formatCurrency(shippingBreakdown.courierGuy.total / shippingBreakdown.courierGuy.count)}
+                    </span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* PUDO (Locker to Locker) */}
+            <Card className="border-0 shadow-sm overflow-hidden">
+              <div className="h-1 bg-purple-500" />
+              <CardHeader className="flex flex-row items-start justify-between pb-2">
+                <div className="space-y-1">
+                  <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Lock className="h-5 w-5 text-purple-600" />
+                    PUDO
+                  </CardTitle>
+                  <CardDescription>Locker to Locker Deliveries</CardDescription>
+                </div>
+                <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                  <Box className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+                  {formatCurrency(shippingBreakdown.pudo.total)}
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Total Shipments</span>
+                  <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300">
+                    {shippingBreakdown.pudo.count} shipments
+                  </Badge>
+                </div>
+                {shippingBreakdown.pudo.count > 0 && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Avg per Shipment</span>
+                    <span className="font-medium">
+                      {formatCurrency(shippingBreakdown.pudo.total / shippingBreakdown.pudo.count)}
+                    </span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
         {/* Main Content Tabs */}
@@ -415,7 +536,7 @@ export default function AdminDashboardClient() {
                   Manage Products
                 </Button>
               </Link>
-              <Link href="/dashboard/admin/payments">
+              <Link href="/dashboard/admin/wallet">
                 <Button variant="outline" className="w-full">
                   <TrendingUp className="h-4 w-4 mr-2" />
                   View Payments

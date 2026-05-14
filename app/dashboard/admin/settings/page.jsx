@@ -5,8 +5,10 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { toast } from '@/components/hooks/use-toast';
-import { Loader2, Save } from 'lucide-react';
+import { Loader2, Save, Percent } from 'lucide-react';
 import AdminDashboardShell from '@/assets/components/AdminDashboardShell';
 
 export default function AdminSettingsPage() {
@@ -16,6 +18,7 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({
     taxEnabled: true,
+    commissionPercentage: 15,
   });
 
   useEffect(() => {
@@ -37,6 +40,7 @@ export default function AdminSettingsPage() {
         const data = await res.json();
         setSettings({
           taxEnabled: data.taxEnabled ?? true,
+          commissionPercentage: data.commissionPercentage ?? 15,
         });
       } else {
         throw new Error('Failed to fetch settings');
@@ -54,6 +58,16 @@ export default function AdminSettingsPage() {
 
   const handleToggleTax = () => {
     setSettings((prev) => ({ ...prev, taxEnabled: !prev.taxEnabled }));
+  };
+
+  const handleCommissionChange = (e) => {
+    const value = parseFloat(e.target.value);
+    if (!isNaN(value)) {
+      setSettings((prev) => ({
+        ...prev,
+        commissionPercentage: Math.min(100, Math.max(0, value)),
+      }));
+    }
   };
 
   const saveSettings = async () => {
@@ -105,9 +119,10 @@ export default function AdminSettingsPage() {
         </div>
 
         <div className="grid gap-6 max-w-2xl">
+          {/* Checkout & Tax Card */}
           <Card>
             <CardHeader>
-              <CardTitle>Checkout & Tax</CardTitle>
+              <CardTitle>Checkout &amp; Tax</CardTitle>
               <CardDescription>
                 Configure how taxes are applied during the checkout process.
               </CardDescription>
@@ -139,24 +154,76 @@ export default function AdminSettingsPage() {
                   />
                 </button>
               </div>
+            </CardContent>
+          </Card>
 
-              <div className="pt-4 flex justify-end">
-                <Button onClick={saveSettings} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
-                  {saving ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save Settings
-                    </>
-                  )}
-                </Button>
+          {/* Platform Commission Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Percent className="h-5 w-5 text-emerald-600" />
+                Platform Commission
+              </CardTitle>
+              <CardDescription>
+                Set the percentage the platform takes from each sale. This is deducted from the seller&apos;s product subtotal — no extra cost to the buyer.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="commissionPercentage">
+                  Commission Percentage
+                </Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    id="commissionPercentage"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    value={settings.commissionPercentage}
+                    onChange={handleCommissionChange}
+                    className="w-32"
+                  />
+                  <span className="text-sm text-muted-foreground font-medium">%</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  For example, if set to {settings.commissionPercentage}%, a R1,000 sale will give the platform R{(1000 * settings.commissionPercentage / 100).toFixed(2)} and the seller R{(1000 - (1000 * settings.commissionPercentage / 100)).toFixed(2)}.
+                </p>
+              </div>
+
+              {/* Visual breakdown preview */}
+              <div className="rounded-lg border bg-muted/40 p-4 space-y-2">
+                <p className="text-sm font-medium">Example breakdown on a R1,000 sale:</p>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <span className="text-muted-foreground">Platform Commission:</span>
+                  <span className="font-semibold text-emerald-600">
+                    R {(1000 * settings.commissionPercentage / 100).toFixed(2)}
+                  </span>
+                  <span className="text-muted-foreground">Seller Receives:</span>
+                  <span className="font-semibold">
+                    R {(1000 - (1000 * settings.commissionPercentage / 100)).toFixed(2)}
+                  </span>
+                </div>
               </div>
             </CardContent>
           </Card>
+
+          {/* Save Button */}
+          <div className="flex justify-end">
+            <Button onClick={saveSettings} disabled={saving} className="bg-emerald-600 hover:bg-emerald-700">
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save Settings
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
     </AdminDashboardShell>

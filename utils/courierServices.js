@@ -103,18 +103,21 @@ const formatIsoDate = (value) => {
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 };
 
-const formatShiplogicAddress = (address = {}, defaults = {}) => ({
-  type: address.type || defaults.type || 'residential',
-  company: address.company || defaults.company || '',
-  street_address: address.street_address || address.streetAddress || address.address || '',
-  local_area: address.local_area || address.suburb || address.apartment || defaults.local_area || '',
-  city: address.city || defaults.city || '',
-  zone: address.zone || address.province || defaults.zone || '',
-  country: normalizeCountryCode(address.country || defaults.country || DEFAULT_COUNTRY),
-  code: address.code || address.postalCode || address.zipCode || defaults.code || '',
-  lat: address.lat ?? address.latitude ?? null,
-  lng: address.lng ?? address.longitude ?? null,
-});
+const formatShiplogicAddress = (address = {}, defaults = {}) => {
+  const local_area = address.local_area || address.suburb || address.apartment || defaults.local_area || address.city || defaults.city || '';
+  return {
+    type: address.type || defaults.type || 'residential',
+    company: address.company || defaults.company || '',
+    street_address: address.street_address || address.streetAddress || address.address || '',
+    local_area,
+    city: address.city || defaults.city || '',
+    zone: address.zone || address.province || defaults.zone || '',
+    country: normalizeCountryCode(address.country || defaults.country || DEFAULT_COUNTRY),
+    code: address.code || address.postalCode || address.zipCode || defaults.code || '',
+    lat: address.lat ?? address.latitude ?? null,
+    lng: address.lng ?? address.longitude ?? null,
+  };
+};
 
 const formatShiplogicContact = (source = {}, fallback = {}) => ({
   name: source.contactName || source.name || source.fullName || fallback.name || source.company || 'Contact',
@@ -187,9 +190,14 @@ const shiplogicQuoteFromRate = (rate, providerName = 'The Courier Guy') => {
   const price = toNumber(rate.total ?? rate.rate ?? rate.amount ?? rate.value, 0);
   const etaFrom = rate.estimated_delivery_from || rate.delivery_from || rate.estimated_delivery || null;
   const etaTo = rate.estimated_delivery_to || rate.delivery_to || rate.estimated_delivery || null;
+  const sl = rate.service_level || {};
+  const code = sl.code || rate.service_level_code || rate.code;
+  const id = sl.id || rate.service_level_id || rate.id;
+  const name = sl.name || rate.service_level_name || rate.name || providerName;
+
   const defaultId = [
     'courier-guy',
-    rate.service_level_id || rate.id || rate.service_level_code,
+    id || code,
     rate.rating_reference || rate.provider_id || Date.now(),
   ]
     .filter(Boolean)
@@ -198,10 +206,10 @@ const shiplogicQuoteFromRate = (rate, providerName = 'The Courier Guy') => {
   return {
     id: String(defaultId),
     provider: 'courier-guy',
-    name: rate.service_level_name || rate.name || providerName,
-    service_level: rate.service_level_code || rate.code || 'LOF' || 'ECO',
-    service_level_code: rate.service_level_code || rate.code,
-    service_level_id: rate.service_level_id || rate.id,
+    name: name,
+    service_level: code || 'LOF',
+    service_level_code: code,
+    service_level_id: id,
     price,
     currency: rate.currency || 'ZAR',
     etaFrom,
@@ -209,6 +217,7 @@ const shiplogicQuoteFromRate = (rate, providerName = 'The Courier Guy') => {
     estimatedDays: calculateEtaDays(etaFrom, etaTo) || rate.estimated_days,
     collectionEta: rate.estimated_collection || rate.collection_estimate,
     rating_reference: rate.rating_reference,
+    description: sl.description || rate.description || '',
     raw: rate,
   };
 };
@@ -342,10 +351,14 @@ export class CourierGuyService {
         delivery_address: formatShiplogicAddress(shipment.to, { type: 'residential' }),
         parcels: formatShiplogicParcels(shipment.parcels),
         declared_value: toNumber(shipment.declaredValue, 0),
-        collection_min_date: formatIsoDate(shipment.collectionDate),
-        delivery_min_date: formatIsoDate(shipment.deliveryDate),
-        service_level_code: shipment.service_level_code || shipment.serviceLevelCode || 'LOF' || 'ECO',
+        // collection_min_date: formatIsoDate(shipment.collectionDate),
+        // delivery_min_date: formatIsoDate(shipment.deliveryDate),
       };
+
+      const requestedCode = shipment.service_level_code || shipment.serviceLevelCode;
+      if (requestedCode) {
+        payload.service_level_code = requestedCode;
+      }
 
       if (this.accountId) {
         payload.account_id = Number(this.accountId);
@@ -356,6 +369,8 @@ export class CourierGuyService {
       if (Array.isArray(shipment.opt_in_time_based_rates) && shipment.opt_in_time_based_rates.length) {
         payload.opt_in_time_based_rates = shipment.opt_in_time_based_rates;
       }
+
+      console.log('📦 ShipLogic Quote Payload:', JSON.stringify(payload, null, 2));
 
       const response = await this.request('/rates', { method: 'POST', body: payload });
       const rates = extractShiplogicRates(response);
@@ -403,9 +418,9 @@ export class CourierGuyService {
         }),
         parcels: formatShiplogicParcels(order.parcels),
         declared_value: toNumber(order.declaredValue, 0),
-        collection_min_date: formatIsoDate(order.collectionDate),
-        due_date: formatIsoDate(order.deliveryDate),
-        delivery_min_date: formatIsoDate(order.deliveryDate),
+        // collection_min_date: formatIsoDate(order.collectionDate),
+        // due_date: formatIsoDate(order.deliveryDate),
+        // delivery_min_date: formatIsoDate(order.deliveryDate),
         special_instructions_collection: order.collectionNotes || '',
         special_instructions_delivery: order.deliveryNotes || '',
         custom_tracking_reference: '',
@@ -983,12 +998,16 @@ export class CourierServiceManager {
     } catch (error) {
       console.error('Courier Guy quote failed:', error);
     }
-    try {
-      const fastwayQuote = await this.fastway.getQuote(shipment);
-      quotes.push({ provider: 'fastway', name: 'Fastway Couriers', ...fastwayQuote });
-    } catch (error) {
-      console.error('Fastway quote failed:', error);
+    
+    if (process.env.FASTWAY_API_KEY) {
+      try {
+        const fastwayQuote = await this.fastway.getQuote(shipment);
+        quotes.push({ provider: 'fastway', name: 'Fastway Couriers', ...fastwayQuote });
+      } catch (error) {
+        console.error('Fastway quote failed:', error);
+      }
     }
+    
     return quotes.sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
   }
 
@@ -1043,7 +1062,14 @@ export class CourierServiceManager {
 // Create a Shiplogic shipment directly from an order document
 export async function createShiplogicShipmentFromOrder(order) {
   const service = new CourierGuyService();
-  const serviceLevelCode = order?.courierQuote?.serviceCode || order?.courierQuote?.service_code || order?.courierQuote?.service_level_code || 'LOF';
+  
+  // Prefer the exact code, but fallback to service_level string or ECO for door-to-door
+  const serviceLevelCode = 
+    order?.courierQuote?.serviceCode || 
+    order?.courierQuote?.service_code || 
+    order?.courierQuote?.service_level_code || 
+    order?.courierQuote?.service_level || 
+    'ECO';
   const parcels = order?.parcelSummary?.parcels?.length ? order.parcelSummary.parcels : [{ description: 'Parcel', weightKg: 1 }];
 
   const collectionAddress = {
@@ -1253,4 +1279,4 @@ export const calculateRequiredLockerSize = (items = []) => {
 };
 
 // Export PUDO locker utilities
-export { LOCKER_SIZES, formatLockerParcel, normalizePickupPoint, extractLockerResults, calculateRequiredLockerSize };
+export { LOCKER_SIZES, formatLockerParcel, normalizePickupPoint, extractLockerResults };

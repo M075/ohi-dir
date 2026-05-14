@@ -65,7 +65,7 @@ export async function POST(request) {
         select: 'title images price stock ownerName owner dimensions weight',
         populate: {
           path: 'owner',
-          select: 'storename email phone address city province zipCode country',
+          select: 'storename contactName email phone address apartment suburb city province zipCode country',
         },
       });
 

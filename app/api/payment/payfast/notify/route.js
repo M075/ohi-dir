@@ -8,7 +8,7 @@ import {
   isPayFastSignatureRequired,
   isPayFastITNEnabled
 } from '@/utils/payfast';
-import { getOrCreateWallet, calculatePlatformFee } from '@/utils/walletHelper';
+import { getOrCreateWallet, calculatePlatformFee, getCommissionPercentage, recordLedgerEntries } from '@/utils/walletHelper';
 import { createShiplogicShipmentFromOrder } from '@/utils/courierServices';
 
 /**
@@ -137,11 +137,17 @@ export async function POST(request) {
         );
 
         if (!existingSaleTx) {
-          const platformFee = calculatePlatformFee(order.subtotal);
+          const commissionPct = await getCommissionPercentage();
+          const platformFee = calculatePlatformFee(order.subtotal, commissionPct);
+          const shippingCost = order.shipping || 0;
+          // Total deductions = commission + shipping
+          // Seller net = subtotal - commission - shipping
+          const totalDeductions = platformFee + shippingCost;
+
           await wallet.addTransaction({
             type: 'sale',
-            amount: order.subtotal,
-            fee: platformFee,
+            amount: order.total,
+            fee: totalDeductions,
             status: 'pending',
             description: `Order Sale - ${order.orderNumber}`,
             order: order._id,
@@ -151,8 +157,14 @@ export async function POST(request) {
               orderNumber: order.orderNumber,
               payfastPaymentId: m_payment_id,
               payfastTransactionId: pf_payment_id,
+              commissionPercentage: commissionPct,
+              commissionAmount: platformFee,
+              shippingDeducted: shippingCost,
             },
           });
+
+          // Record ledger entries for the 3-way split
+          await recordLedgerEntries(order, commissionPct);
         }
       } else if (newPaymentStatus === 'failed') {
         order.status = 'cancelled';

@@ -7,6 +7,12 @@ const SettingSchema = new Schema(
       type: Boolean,
       default: true,
     },
+    commissionPercentage: {
+      type: Number,
+      default: 15,
+      min: 0,
+      max: 100,
+    },
   },
   {
     timestamps: true,

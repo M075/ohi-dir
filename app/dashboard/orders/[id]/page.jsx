@@ -69,6 +69,8 @@ export default function OrderDetailPage() {
   const [selectedLockerSize, setSelectedLockerSize] = useState("M");
   const [bookingPudo, setBookingPudo] = useState(false);
 
+  const [trackingStatus, setTrackingStatus] = useState("");
+
   const isSeller = order?.seller?._id === session?.user?.id;
   const isPudoOrder = order?.fulfillmentOption === "pudo" || order?.shippingMethod === "pudo";
 
@@ -77,6 +79,28 @@ export default function OrderDetailPage() {
       fetchOrder();
     }
   }, [params.id]);
+
+  useEffect(() => {
+    if (order?.trackingNumber) {
+      fetchTracking();
+    }
+  }, [order?.trackingNumber]);
+
+  const fetchTracking = async () => {
+    try {
+      const res = await fetch(`/api/orders/${params.id}/track`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.tracking?.status) {
+          setTrackingStatus(data.tracking.status);
+        } else if (data?.tracking?.state) {
+          setTrackingStatus(data.tracking.state);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch tracking details:", error);
+    }
+  };
 
   const fetchOrder = async () => {
     try {
@@ -113,16 +137,23 @@ export default function OrderDetailPage() {
   const handleUpdateOrder = async () => {
     try {
       setUpdating(true);
-      const res = await fetch(`/api/orders/${params.id}`, {
-        method: "PATCH",
+      const res = await fetch(`/api/orders/${params.id}/status`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          status: formData.status,
+          trackingNumber: formData.trackingNumber,
+          notes: formData.sellerNotes,
+        }),
       });
 
-      if (!res.ok) throw new Error("Failed to update order");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to update order");
+      }
 
-      const updated = await res.json();
-      setOrder(updated);
+      const responseData = await res.json();
+      setOrder(responseData.order || responseData);
 
       toast({
         title: "Success",
@@ -581,13 +612,21 @@ export default function OrderDetailPage() {
                   )}
                   {order.trackingUrl && (
                     <a
-                      className="text-indigo-600 hover:underline"
+                      className="text-indigo-600 hover:underline block mt-1"
                       href={order.trackingUrl}
                       target="_blank"
                       rel="noreferrer"
                     >
                       View live tracking
                     </a>
+                  )}
+                  {trackingStatus && (
+                    <div className="flex items-center gap-2 mt-2 pt-2 border-t">
+                      <span className="text-muted-foreground">Live Status:</span>
+                      <span className="font-semibold text-blue-700 dark:text-blue-400 uppercase text-xs">
+                        {trackingStatus}
+                      </span>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -604,43 +643,6 @@ export default function OrderDetailPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="status">Order Status</Label>
-                    <Select
-                      value={formData.status}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, status: value })
-                      }
-                    >
-                      <SelectTrigger id="status">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="confirmed">Confirmed</SelectItem>
-                        <SelectItem value="processing">Processing</SelectItem>
-                        <SelectItem value="shipped">Shipped</SelectItem>
-                        <SelectItem value="delivered">Delivered</SelectItem>
-                        <SelectItem value="cancelled">Cancelled</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="tracking">Tracking Number</Label>
-                    <Input
-                      id="tracking"
-                      value={formData.trackingNumber}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          trackingNumber: e.target.value,
-                        })
-                      }
-                      placeholder="Enter tracking number"
-                    />
-                  </div>
-
                   <div>
                     <Label htmlFor="notes">Seller Notes</Label>
                     <Textarea
