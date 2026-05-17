@@ -190,7 +190,7 @@ const OrderSchema = new Schema(
       type: [OrderItemSchema],
       required: true,
       validate: {
-        validator: function(v) {
+        validator: function (v) {
           return Array.isArray(v) && v.length > 0;
         },
         message: 'Order must have at least one item'
@@ -320,7 +320,7 @@ const OrderSchema = new Schema(
 );
 
 // Generate unique order number BEFORE validation
-OrderSchema.pre('validate', async function(next) {
+OrderSchema.pre('validate', async function (next) {
   // Only generate if this is a new order and orderNumber is not set
   if (this.isNew && !this.orderNumber) {
     const date = new Date();
@@ -359,7 +359,7 @@ OrderSchema.pre('validate', async function(next) {
 });
 
 // Add status history when status changes
-OrderSchema.pre('save', function(next) {
+OrderSchema.pre('save', function (next) {
   if (this.isModified('status') && !this.isNew) {
     // Don't add duplicate history entries
     const lastHistoryStatus = this.statusHistory[this.statusHistory.length - 1]?.status;
@@ -377,24 +377,22 @@ OrderSchema.pre('save', function(next) {
 // Indexes for faster queries
 OrderSchema.index({ buyer: 1, createdAt: -1 });
 OrderSchema.index({ seller: 1, createdAt: -1 });
-OrderSchema.index({ orderNumber: 1 }, { unique: true, sparse: true });
 OrderSchema.index({ status: 1, createdAt: -1 });
-OrderSchema.index({ paymentStatus: 1 });
 OrderSchema.index({ 'shippingAddress.city': 1 });
 OrderSchema.index({ 'shippingAddress.province': 1 });
 
 // Virtual for calculating order age
-OrderSchema.virtual('orderAge').get(function() {
+OrderSchema.virtual('orderAge').get(function () {
   return Math.floor((Date.now() - this.createdAt) / (1000 * 60 * 60 * 24)); // days
 });
 
 // Method to check if order can be cancelled
-OrderSchema.methods.canBeCancelled = function() {
+OrderSchema.methods.canBeCancelled = function () {
   return ['pending', 'confirmed'].includes(this.status) && this.paymentStatus !== 'paid';
 };
 
 // Method to check if order can be refunded
-OrderSchema.methods.canBeRefunded = function() {
+OrderSchema.methods.canBeRefunded = function () {
   return this.paymentStatus === 'paid' && ['delivered', 'shipped'].includes(this.status);
 };
 

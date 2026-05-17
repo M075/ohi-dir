@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-import withPWA from 'next-pwa';
+import withPWAInit from '@ducanh2912/next-pwa';
 
 const nextConfig = {
   images: {
@@ -15,7 +15,7 @@ const nextConfig = {
         pathname: '**',
       },
       {
-        hostname: 'images.pexels.com', 
+        hostname: 'images.pexels.com',
       },
       {
         hostname: 'images.unsplash.com'
@@ -40,7 +40,7 @@ const nextConfig = {
   turbopack: {},
 }
 
-const pwaConfig = withPWA({
+const pwaConfig = withPWAInit({
   dest: 'public',
   register: true,
   skipWaiting: true,
