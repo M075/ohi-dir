@@ -320,7 +320,7 @@ const OrderSchema = new Schema(
 );
 
 // Generate unique order number BEFORE validation
-OrderSchema.pre('validate', async function (next) {
+OrderSchema.pre('validate', async function () {
   // Only generate if this is a new order and orderNumber is not set
   if (this.isNew && !this.orderNumber) {
     const date = new Date();
@@ -355,11 +355,10 @@ OrderSchema.pre('validate', async function (next) {
       console.log(`⚠️ Used fallback order number: ${this.orderNumber}`);
     }
   }
-  next();
 });
 
 // Add status history when status changes
-OrderSchema.pre('save', function (next) {
+OrderSchema.pre('save', function () {
   if (this.isModified('status') && !this.isNew) {
     // Don't add duplicate history entries
     const lastHistoryStatus = this.statusHistory[this.statusHistory.length - 1]?.status;
@@ -371,7 +370,6 @@ OrderSchema.pre('save', function (next) {
       });
     }
   }
-  next();
 });
 
 // Indexes for faster queries

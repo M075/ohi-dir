@@ -78,7 +78,7 @@ const PayoutSchema = new Schema({
 });
 
 // Generate reference number before saving
-PayoutSchema.pre('validate', async function(next) {
+PayoutSchema.pre('validate', async function() {
   if (this.isNew && !this.referenceNumber) {
     const date = new Date();
     const year = date.getFullYear();
@@ -88,7 +88,6 @@ PayoutSchema.pre('validate', async function(next) {
     
     this.referenceNumber = `PO-${year}${month}${day}-${random}`;
   }
-  next();
 });
 
 // Indexes

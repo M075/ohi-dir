@@ -59,7 +59,7 @@ const CartSchema = new Schema(
 );
 
 // Calculate totals before saving
-CartSchema.pre('save', async function(next) {
+CartSchema.pre('save', async function() {
   // Calculate subtotal
   this.subtotal = this.items.reduce((total, item) => {
     return total + (item.price * item.quantity);
@@ -83,8 +83,6 @@ CartSchema.pre('save', async function(next) {
   
   // Calculate total
   this.total = this.subtotal + this.tax + this.shipping;
-  
-  next();
 });
 
 // Add index for faster queries

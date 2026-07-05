@@ -27,6 +27,7 @@ import {
   Wallet,
   Store,
   BarChart3,
+  Heart,
 } from "lucide-react";
 import {
   Breadcrumb,
@@ -85,6 +86,11 @@ export default function DashboardShell({ children }) {
       href: "/dashboard/wallet",
       icon: Wallet,
     },
+    {
+      name: "Favourites",
+      href: "/dashboard/favourites",
+      icon: Heart,
+    },
   ];
 
   // Seller navigation (full access)
@@ -124,6 +130,11 @@ export default function DashboardShell({ children }) {
       name: "Wallet",
       href: "/dashboard/wallet",
       icon: Wallet,
+    },
+    {
+      name: "Favourites",
+      href: "/dashboard/favourites",
+      icon: Heart,
     },
   ];
 

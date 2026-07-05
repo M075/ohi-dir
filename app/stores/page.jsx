@@ -35,19 +35,38 @@ const StoresPage = () => {
     fetchStores();
   }, []);
 
-  const handleLike = (storeId) => {
+  const handleLike = async (storeId) => {
+    // Optimistic update
+    const prevStores = stores;
     setStores(
       stores.map((store) => {
         if (store._id === storeId) {
           return {
             ...store,
-            likes: store.isLiked ? (store.likes || 0) - 1 : (store.likes || 0) + 1,
-            isLiked: ! store.isLiked,
+            likes: store.isLiked ? Math.max(0, (store.likes || 0) - 1) : (store.likes || 0) + 1,
+            isLiked: !store.isLiked,
           };
         }
         return store;
       })
     );
+
+    try {
+      const res = await fetch(`/api/stores/${storeId}/likes`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed to toggle like');
+      const data = await res.json();
+      setStores(
+        stores.map((store) =>
+          store._id === storeId
+            ? { ...store, isLiked: data.isLiked, likes: data.likes }
+            : store
+        )
+      );
+    } catch (err) {
+      console.error('Error liking store:', err);
+      // Revert on error
+      setStores(prevStores);
+    }
   };
 
   const handleStoreSelect = (storeId) => {

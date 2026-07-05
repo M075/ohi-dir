@@ -10,8 +10,9 @@ import { Grid3x3, List } from 'lucide-react';
 // Reusable FilterAndSort component
 // Props:
 // - products: array of product objects
+// - onLike?: optional function(productId) -> void for toggling like
 // - renderResults?: optional function(filteredProducts) -> JSX to render results (default: grid of ProductCard)
-export default function FilterAndSort({ products = [], renderResults, initialCategory = 'all' }) {
+export default function FilterAndSort({ products = [], renderResults, initialCategory = 'all', onLike }) {
   const [query, setQuery] = React.useState('');
   const [category, setCategory] = React.useState(initialCategory);
   const [sort, setSort] = React.useState('latest');
@@ -82,7 +83,7 @@ export default function FilterAndSort({ products = [], renderResults, initialCat
       return (
         <div className="space-y-4">
           {items.map((p, i) => (
-            <ProductListCard key={p.id || p._id || i} product={p} />
+            <ProductListCard key={p.id || p._id || i} product={p} onLike={onLike} />
           ))}
         </div>
       );
@@ -91,7 +92,7 @@ export default function FilterAndSort({ products = [], renderResults, initialCat
     return (
       <div className="-mx-4 sm:mx-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4">
         {items.map((p, i) => (
-          <ProductCard className="bg-amber-400" key={p.id || p._id || i} product={p} />
+          <ProductCard className="bg-amber-400" key={p.id || p._id || i} product={p} onLike={onLike} />
         ))}
       </div>
     );

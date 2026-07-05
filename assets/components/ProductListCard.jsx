@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Eye, ShoppingCart, Star } from "lucide-react";
+import { Eye, ShoppingCart, Star, Heart } from "lucide-react";
 import { useCart } from "@/assets/contexts/CartContext";
 import { toast } from "@/components/hooks/use-toast";
 
@@ -12,10 +12,16 @@ const formatPrice = (value) => {
   return price.toFixed(2);
 };
 
-const ProductListCard = ({ product = {} }) => {
+const ProductListCard = ({ product = {}, onLike }) => {
   const imageUrl = product?.images?.[0] || "/image.png";
   const { addToCart } = useCart();
   const [adding, setAdding] = useState(false);
+
+  const handleLike = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onLike) onLike(product._id);
+  };
 
   const discountedPrice = product?.discountPercentage
     ? (Number(product.price) || 0) * (1 - product.discountPercentage / 100)
@@ -113,6 +119,18 @@ const ProductListCard = ({ product = {} }) => {
 
         {/* Actions Section */}
         <div className="flex flex-col gap-2 flex-shrink-0">
+          <Button
+            size="icon"
+            variant="outline"
+            onClick={handleLike}
+            className={`${
+              product?.isLiked
+                ? 'bg-red-500 text-white border-red-500 hover:bg-red-600 hover:text-white'
+                : 'text-red-500 border-red-500 dark:bg-transparent dark:hover:bg-red-500 hover:text-white'
+            }`}
+          >
+            <Heart className={`h-4 w-4 ${product?.isLiked ? 'fill-current' : ''}`} />
+          </Button>
           <Link href={`/products/${product?._id || ""}`}>
             <Button size='icon' variant="outline">
               <Eye className="h-4 w-4" />

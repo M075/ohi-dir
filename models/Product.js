@@ -128,6 +128,14 @@ const ProductSchema = new Schema(
       type: String,
       default: null,
     },
+    likes: {
+      type: Number,
+      default: 0,
+    },
+    isLiked: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
@@ -135,7 +143,7 @@ const ProductSchema = new Schema(
 );
 
 // Pre-save hook: populate shippingOrigin from owner's city if not explicitly set
-ProductSchema.pre('save', async function(next) {
+ProductSchema.pre('save', async function() {
   try {
     // Only populate shippingOrigin if it's not already set
     if (!this.shippingOrigin && this.owner) {
@@ -148,7 +156,6 @@ ProductSchema.pre('save', async function(next) {
   } catch (err) {
     console.warn('Failed to populate shippingOrigin from user city:', err);
   }
-  next();
 });
 
 // Add index for better query performance

@@ -95,6 +95,14 @@ const UserSchema = new Schema(
         ref: 'Product',
       },
     ],
+    likes: {
+      type: Number,
+      default: 0,
+    },
+    isLiked: {
+      type: Boolean,
+      default: false,
+    },
     
     // Geospatial fields
     latitude: {
@@ -209,7 +217,7 @@ const UserSchema = new Schema(
 );
 
 // Pre-save hook to set admin based on email
-UserSchema.pre('save', function(next) {
+UserSchema.pre('save', function() {
   const adminEmails = (process.env.ADMIN_EMAILS || '').split(',');
   if (adminEmails.includes(this.email)) {
     this.isAdmin = true;
@@ -228,22 +236,19 @@ UserSchema.pre('save', function(next) {
       ];
     }
   }
-  next();
 });
 
 // Hash password before saving
-UserSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  
+UserSchema.pre('save', async function() {
+  if (!this.isModified('password')) return;
+
   if (this.password) {
     this.password = await bcrypt.hash(this.password, 12);
   }
-  
-  next();
 });
 
 // Set location if coordinates exist
-UserSchema.pre('save', function(next) {
+UserSchema.pre('save', function() {
   if (this.latitude != null && this.longitude != null) {
     this.location = {
       type: 'Point',
@@ -252,11 +257,10 @@ UserSchema.pre('save', function(next) {
   } else {
     this.location = undefined;
   }
-  next();
 });
 
 // Ensure default storename
-UserSchema.pre('save', function (next) {
+UserSchema.pre('save', function() {
   if (!this.storename && this.email) {
     const local = (this.email.split('@')[0] || this.email).toString();
     this.storename = local
@@ -266,7 +270,6 @@ UserSchema.pre('save', function (next) {
   }
 
   this._wasStorenameModified = this.isModified('storename');
-  next();
 });
 
 // Update products when storename changes

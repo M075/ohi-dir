@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { Heart, MapPin } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Heart, Package } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -28,17 +27,24 @@ const StoreCard = ({ shop, onLike, isHighlighted }) => {
         id={`store-${shop.id}`}
         className="relative flex flex-col h-full overflow-hidden hover:cursor-pointer hover:shadow-sm transition-shadow"
       >
-        {/* Like button positioned absolutely */}
-        <Button
-          variant="ghost"
-          size="icon"
+        {/* Products badge - top left */}
+        <div className="absolute top-2 left-2 z-10 inline-flex items-center gap-1.5 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200 shadow-sm">
+          <Package className="h-4 w-4 text-emerald-500" />
+          <span>{shop.totalProducts}</span>
+        </div>
+
+        {/* Likes badge - top right */}
+        <button
+          type="button"
           onClick={handleLike}
-          className={`absolute top-2 right-2 z-10 text-red-500 focus:text-red-500 focus-visible:text-red-500 focus-visible:ring-0`}
+          aria-label="Like store"
+          className="absolute top-2 right-2 z-10 inline-flex items-center gap-1.5 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200 shadow-sm hover:border-red-300 dark:hover:border-red-700 transition-colors"
         >
           <Heart
-            className={`h-5 w-5 transition-all ${shop.isLiked ? "fill-red-500" : ""}`}
+            className={`h-4 w-4 transition-all ${shop.isLiked ? "fill-red-500 text-red-500" : "text-red-500"}`}
           />
-        </Button>
+          <span>{shop.likes}</span>
+        </button>
 
         <CardContent className="px-4 py-6 flex-1">
           <div className="flex flex-col items-center text-center">
@@ -73,21 +79,6 @@ const StoreCard = ({ shop, onLike, isHighlighted }) => {
             )}
           </div>
         </CardContent>
-
-      <CardFooter className="flex p-0 border-t border-zinc-200 dark:border-zinc-800 dark:bg-zinc-900/20 mt-auto">
-        <div className="flex-1 px-4 py-3 text-center border-r border-zinc-200 dark:border-zinc-800">
-          <div className="text-lg font-semibold dark:text-white">
-            {shop.likes}
-          </div>
-          <div className="text-sm dark:text-gray-400">Likes</div>
-        </div>
-        <div className="flex-1 px-4 py-3 text-center">
-          <div className="text-lg font-semibold dark:text-white">
-            {shop.totalProducts}
-          </div>
-          <div className="text-sm dark:text-gray-400">Products</div>
-        </div>
-      </CardFooter>
       </Card>
     </Link>
   );

@@ -1,20 +1,39 @@
 import connectDB from '@/config/database';
 import Product from '@/models/Product';
 import User from '@/models/User';
+import Like from '@/models/Like';
 import { getSessionUser } from '@/utils/getSessionUser';
 import { uploadMultipleToImageKit, getImagePresets } from '@/utils/imagekit';
 
 export const GET = async (request) => {
   try {
     await connectDB();
-    const products = await Product.find();
-    
-    // Optionally add optimized URLs to response
+    const products = await Product.find().lean();
+
+    const sessionUser = await getSessionUser();
+    const currentUserId = sessionUser?.userId || null;
+
+    let likedProductIds = new Set();
+    if (currentUserId && products.length > 0) {
+      const productIds = products.map(p => p._id);
+      const userLikes = await Like.find({
+        user: currentUserId,
+        targetType: 'Product',
+        target: { $in: productIds },
+      })
+        .select('target')
+        .lean();
+      likedProductIds = new Set(userLikes.map(like => like.target.toString()));
+    }
+
+    // Optionally add optimized URLs and like status to response
     const productsWithOptimizedImages = products.map(product => ({
-      ...product.toObject(),
-      optimizedImages: product.images.map(url => getImagePresets(url))
+      ...product,
+      optimizedImages: product.images.map(url => getImagePresets(url)),
+      likes: product.likes || 0,
+      isLiked: likedProductIds.has(product._id.toString()),
     }));
-    
+
     return new Response(JSON.stringify(productsWithOptimizedImages), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }

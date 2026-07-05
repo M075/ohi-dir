@@ -1,5 +1,6 @@
 import connectDB from "@/config/database";
 import Product from "@/models/Product";
+import Like from "@/models/Like";
 import { getSessionUser } from "@/utils/getSessionUser";
 import { 
   uploadToImageKit, 
@@ -22,7 +23,7 @@ export const GET = async (request, { params }) => {
       );
     }
     
-    const product = await Product.findById(id);
+    const product = await Product.findById(id).lean();
     
     if (!product) {
       return new Response(
@@ -30,11 +31,25 @@ export const GET = async (request, { params }) => {
         { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
+
+    // Check if the current user has liked this product
+    let isLiked = false;
+    const sessionUser = await getSessionUser();
+    if (sessionUser?.userId) {
+      const existingLike = await Like.findOne({
+        user: sessionUser.userId,
+        target: id,
+        targetType: 'Product',
+      }).lean();
+      isLiked = !!existingLike;
+    }
     
     // Add optimized image URLs for different use cases
     const productWithOptimizedImages = {
-      ...product.toObject(),
-      optimizedImages: product.images.map(url => getImagePresets(url))
+      ...product,
+      optimizedImages: product.images.map(url => getImagePresets(url)),
+      likes: product.likes || 0,
+      isLiked,
     };
     
     return new Response(

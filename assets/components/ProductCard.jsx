@@ -6,14 +6,14 @@ import { useCart } from "@/assets/contexts/CartContext";
 import { toast } from "@/components/hooks/use-toast";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart } from "lucide-react";
+import { ShoppingCart, Heart } from "lucide-react";
 
-function classNames(... classes) {
+function classNames(...classes) {
   return classes.filter(Boolean).join(" ");
 }
 
-const ProductCard = ({ product }) => {
-  const imageUrl = product?. images?.[0] || "/image. png";
+const ProductCard = ({ product, onLike }) => {
+  const imageUrl = product?.images?.[0] || "/image.png";
   const { addToCart } = useCart();
   const [isAdding, setIsAdding] = useState(false);
 
@@ -38,41 +38,60 @@ const ProductCard = ({ product }) => {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to add item to cart.  Please try again.",
+        description: "Failed to add item to cart. Please try again.",
       });
     } finally {
       setIsAdding(false);
     }
   };
 
+  const handleLike = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onLike) onLike(product._id);
+  };
+
   return (
     <div className="group relative">
+      {/* Like button positioned absolutely */}
+      <button
+        type="button"
+        onClick={handleLike}
+        aria-label="Like product"
+        className="absolute top-2 right-2 z-10 inline-flex items-center gap-1.5 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-sm border border-zinc-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-200 shadow-sm hover:border-red-300 dark:hover:border-red-700 transition-colors"
+      >
+        <Heart
+          className={`h-4 w-4 transition-all ${product?.isLiked ? "fill-red-500 text-red-500" : "text-red-500"}`}
+        />
+        <span>{product?.likes || 0}</span>
+      </button>
+
       <div className="h-56 w-full overflow-hidden rounded-md bg-gray-200 group-hover:opacity-75 lg:h-72 xl:h-80">
         <Image
           width={300}
           height={320}
           src={imageUrl}
-          alt={product?. title || "Product"}
+          alt={product?.title || "Product"}
           className="h-full w-full object-cover object-center"
         />
       </div>
-      
-      {product?. ownerName && (
+
+      {product?.ownerName && (
         <span className="mt-4 inline-block text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
           {product.ownerName}
         </span>
       )}
-      
+
       <h3 className="mt-2 text-sm text-gray-700 dark:text-gray-200">
         <Link href={`/products/${product._id}`}>
           <span className="absolute inset-0" />
-          {product?. title}
+          {product?.title}
         </Link>
       </h3>
-      
+
       {(product?.rating > 0 || product?.review?.length > 0) && (
         <div className="mt-1 flex items-center">
-          {[0, 1, 2, 3, 4]. map((rating) => (
+          {[0, 1, 2, 3, 4].map((rating) => (
             <StarIcon
               key={rating}
               aria-hidden="true"
@@ -87,27 +106,27 @@ const ProductCard = ({ product }) => {
           </span>
         </div>
       )}
-      
+
       <div className="flex items-center justify-between">
         <div>
           {product?.discountPercentage > 0 && (
             <span className="line-through mr-2 text-sm text-gray-500 dark:text-gray-400">
-              R {product?. price}
+              R {product?.price}
             </span>
           )}
           <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
             R{" "}
             {product?.discountPercentage > 0
-              ? (product. price * (1 - product. discountPercentage / 100)). toFixed(2)
-              : product?. price}
+              ? (product.price * (1 - product.discountPercentage / 100)).toFixed(2)
+              : product?.price}
           </span>
           {product?.discountPercentage > 0 && (
-            <span className="ml-2 inline-flex text-xs bg-red-100 dark:bg-red-700 text-red-600 dark:text-red-200 px-1. 5 py-0.5 rounded">
+            <span className="ml-2 inline-flex text-xs bg-red-100 dark:bg-red-700 text-red-600 dark:text-red-200 px-1.5 py-0.5 rounded">
               -{product.discountPercentage}%
             </span>
           )}
         </div>
-        
+
         <Button
           size="icon"
           variant="secondary"
