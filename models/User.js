@@ -41,6 +41,19 @@ const UserSchema = new Schema(
       type: String,
       required: [true, 'Store name is required!'],
     },
+    slug: {
+      type: String,
+      unique: true,
+      sparse: true,
+      lowercase: true,
+      trim: true,
+      index: true,
+    },
+    previousSlugs: [
+      {
+        type: String,
+      },
+    ],
     phone: {
       type: String,
     },
@@ -270,6 +283,48 @@ UserSchema.pre('save', function() {
   }
 
   this._wasStorenameModified = this.isModified('storename');
+});
+
+// Generate / refresh a unique slug when storename changes (or slug is missing).
+// Pushes the prior slug into previousSlugs so old URLs keep resolving + 301 to canonical.
+UserSchema.pre('save', async function () {
+  const storenameChanged = this.isModified('storename');
+  if (!storenameChanged && this.slug) return;
+  if (!this.storename) return;
+
+  const { toSlug, uniqueSlug } = await import('@/utils/slugify');
+
+  const exists = async (candidate, excludeId) => {
+    const q = { slug: candidate };
+    if (excludeId) q._id = { $ne: excludeId };
+    const found = await this.constructor.findOne(q).select('_id').lean();
+    return !!found;
+  };
+
+  // On rename, remember the old slug so old links can 301 redirect.
+  if (storenameChanged && this.slug) {
+    if (!this.previousSlugs) this.previousSlugs = [];
+    if (!this.previousSlugs.includes(this.slug)) {
+      this.previousSlugs.push(this.slug);
+    }
+  }
+
+  let attempts = 0;
+  const maxAttempts = 5;
+  while (attempts < maxAttempts) {
+    try {
+      this.slug = await uniqueSlug(this.storename, exists, { excludeId: this._id });
+      return;
+    } catch (err) {
+      attempts++;
+      if (attempts >= maxAttempts) {
+        console.warn('Failed to generate unique User slug:', err.message);
+        // Last-resort fallback: slug + timestamp suffix keeps the unique index happy.
+        this.slug = `${toSlug(this.storename)}-${Date.now().toString(36).slice(-6)}`;
+        return;
+      }
+    }
+  }
 });
 
 // Update products when storename changes

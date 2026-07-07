@@ -3,6 +3,7 @@ import connectDB from '@/config/database';
 import Product from '@/models/Product';
 import Like from '@/models/Like';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { resolveProductId, isObjectId } from '@/utils/slugify';
 
 export async function POST(request, { params }) {
   try {
@@ -24,7 +25,16 @@ export async function POST(request, { params }) {
       );
     }
 
-    const product = await Product.findById(id);
+    // Accept slug, previousSlug, or ObjectId; resolve to ObjectId for DB ops.
+    const productId = isObjectId(id) ? id : await resolveProductId(id);
+    if (!productId) {
+      return new Response(
+        JSON.stringify({ message: 'Product not found' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const product = await Product.findById(productId);
     if (!product) {
       return new Response(
         JSON.stringify({ message: 'Product not found' }),
@@ -34,7 +44,7 @@ export async function POST(request, { params }) {
 
     const existingLike = await Like.findOne({
       user: sessionUser.userId,
-      target: id,
+      target: productId,
       targetType: 'Product',
     });
 
@@ -52,7 +62,7 @@ export async function POST(request, { params }) {
       // Like
       await Like.create({
         user: sessionUser.userId,
-        target: id,
+        target: productId,
         targetType: 'Product',
       });
       product.likes = (product.likes || 0) + 1;

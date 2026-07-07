@@ -34,10 +34,24 @@ export async function GET(request) {
       const stores = await User.find({ _id: { $in: storeIds } })
         .select('-bookmarks -email')
         .lean();
-      likedStores = stores.map(store => ({
-        ...store,
-        isLiked: true,
-      }));
+
+      // Get product counts per store
+      const productCounts = await Product.aggregate([
+        { $match: { owner: { $in: storeIds } } },
+        { $group: { _id: '$owner', count: { $sum: 1 } } }
+      ]);
+      const productCountMap = new Map(
+        productCounts.map(pc => [pc._id.toString(), pc.count])
+      );
+
+      likedStores = stores.map(store => {
+        const storeIdStr = store._id.toString();
+        return {
+          ...store,
+          isLiked: true,
+          totalProducts: productCountMap.get(storeIdStr) || 0,
+        };
+      });
     }
 
     // Fetch liked products

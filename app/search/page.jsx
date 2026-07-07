@@ -265,7 +265,7 @@ const SearchResults = () => {
                     {results.sellers.map((seller) => (
                       <Link
                         key={seller._id}
-                        href={`/stores/${seller._id}`}
+                        href={`/stores/${seller.slug || seller._id}`}
                         className="group block"
                       >
                         {" "}

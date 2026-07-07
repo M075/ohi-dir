@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "migrate:ownerName": "node scripts/backfill-ownerName.mjs",
+    "migrate:slugs": "node scripts/backfill-slugs.mjs",
     "install:legacy": "npm install --legacy-peer-deps"
   },
   "dependencies": {

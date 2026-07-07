@@ -15,6 +15,19 @@ const ProductSchema = new Schema(
       type: String,
       required: false,
     },
+    slug: {
+      type: String,
+      unique: true,
+      sparse: true,
+      lowercase: true,
+      trim: true,
+      index: true,
+    },
+    previousSlugs: [
+      {
+        type: String,
+      },
+    ],
     description: {
       type: String,
     },
@@ -155,6 +168,47 @@ ProductSchema.pre('save', async function() {
     }
   } catch (err) {
     console.warn('Failed to populate shippingOrigin from user city:', err);
+  }
+});
+
+// Generate / refresh a unique slug when title changes (or slug is missing).
+// Pushes the prior slug into previousSlugs so old URLs keep resolving + 301 to canonical.
+ProductSchema.pre('save', async function () {
+  const titleChanged = this.isModified('title');
+  if (!titleChanged && this.slug) return;
+  if (!this.title) return;
+
+  const { toSlug, uniqueSlug } = await import('@/utils/slugify');
+
+  const exists = async (candidate, excludeId) => {
+    const q = { slug: candidate };
+    if (excludeId) q._id = { $ne: excludeId };
+    const found = await this.constructor.findOne(q).select('_id').lean();
+    return !!found;
+  };
+
+  // On rename, remember the old slug so old links can 301 redirect.
+  if (titleChanged && this.slug) {
+    if (!this.previousSlugs) this.previousSlugs = [];
+    if (!this.previousSlugs.includes(this.slug)) {
+      this.previousSlugs.push(this.slug);
+    }
+  }
+
+  let attempts = 0;
+  const maxAttempts = 5;
+  while (attempts < maxAttempts) {
+    try {
+      this.slug = await uniqueSlug(this.title, exists, { excludeId: this._id });
+      return;
+    } catch (err) {
+      attempts++;
+      if (attempts >= maxAttempts) {
+        console.warn('Failed to generate unique Product slug:', err.message);
+        this.slug = `${toSlug(this.title)}-${Date.now().toString(36).slice(-6)}`;
+        return;
+      }
+    }
   }
 });
 

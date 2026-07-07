@@ -254,7 +254,7 @@ export default function AdminBuyersClient() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <Link href={`/stores/${buyer._id}`}>
+                          <Link href={`/stores/${buyer.slug || buyer._id}`}>
                             <Button size="sm" variant="ghost" title="View Profile">
                               <Eye className="h-4 w-4" />
                             </Button>

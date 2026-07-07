@@ -254,7 +254,7 @@ export default function AdminStoresClient() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <Link href={`/stores/${store._id}`}>
+                          <Link href={`/stores/${store.slug || store._id}`}>
                             <Button size="sm" variant="ghost" title="View Store">
                               <Eye className="h-4 w-4" />
                             </Button>

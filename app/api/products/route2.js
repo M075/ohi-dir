@@ -69,7 +69,7 @@ console.log(sessionUser)
 await newProduct.save();
 
 return Response.redirect(
-  `${process.env.NEXTAUTH_URL}/products/${newProduct._id}`
+  `${process.env.NEXTAUTH_URL}/products/${newProduct.slug || newProduct._id}`
 );
     // return new Response(JSON.stringify(productData), {
     //   status: 200

@@ -1,20 +1,40 @@
 import connectDB from '@/config/database';
 import Product from '@/models/Product';
+import User from '@/models/User';
+import { isObjectId } from '@/utils/slugify';
 
-// GET /api/products/user/[userId]
+// GET /api/products/user/[userId]   (userId may be a store slug, previousSlug, or ObjectId)
 export const GET = async (request, { params }) => {
   try {
     await connectDB();
 
-    // Get user ID from URL which is the folder name /api/products/user/[userId]
     const { userId } = await params;
 
     if (!userId) {
       return new Response('User ID is required', { status: 400 });
     }
 
-    // Get products tha belong to the user only
-    const products = await Product.find({ owner: userId });
+    // Resolve slug/previousSlug -> ObjectId for the Product query.
+    let ownerId = null;
+    if (isObjectId(userId)) {
+      ownerId = userId;
+    } else {
+      const user = await User.findOne({
+        $or: [{ slug: userId }, { previousSlugs: userId }],
+      })
+        .select('_id')
+        .lean();
+      if (!user) {
+        return new Response(JSON.stringify({ error: 'Store not found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      ownerId = String(user._id);
+    }
+
+    // Get products that belong to the user only
+    const products = await Product.find({ owner: ownerId });
 
     return new Response(JSON.stringify(products), {
       status: 200,

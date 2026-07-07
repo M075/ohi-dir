@@ -384,7 +384,7 @@ export default function AdminDashboardClient() {
                         <Badge variant={user.isActive ? "default" : "secondary"}>
                           {user.isActive ? "Active" : "Suspended"}
                         </Badge>
-                        <Link href={`/stores/${user._id}`}>
+                        <Link href={`/stores/${user.slug || user._id}`}>
                           <Button size="sm" variant="outline">
                             <Eye className="h-4 w-4" />
                           </Button>

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npx next *)",
+      "Bash(node --check utils/slugify.js)",
+      "Bash(node --check scripts/verify-slugs.mjs)",
+      "Bash(node --check scripts/backfill-slugs.mjs)",
+      "Bash(node --check models/User.js)",
+      "Bash(node --check models/Product.js)"
+    ]
+  }
+}

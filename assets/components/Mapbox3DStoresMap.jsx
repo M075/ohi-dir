@@ -433,7 +433,7 @@ export default function Mapbox3DStoresMap({ stores = [], onStoreSelect }) {
               )}
               
               <Link 
-                href={`/stores/${selectedStore._id}`}
+                href={`/stores/${selectedStore.slug || selectedStore._id}`}
                 className="inline-flex items-center justify-center w-full bg-emerald-600 text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors"
               >
                 View Store

@@ -158,7 +158,7 @@ export default function StoreFilterSort({ stores = [], onLike, selectedStoreId, 
             <StoreListCard 
               key={store._id} 
               shop={{
-                id: store._id,
+                id: store.slug || store._id,
                 name: store.storename,
                 avatar: store.image || '/profile.png',
                 likes: store.likes || 0,
@@ -179,7 +179,7 @@ export default function StoreFilterSort({ stores = [], onLike, selectedStoreId, 
             <StoreCard
               key={store._id}
               shop={{
-                id: store._id,
+                id: store.slug || store._id,
                 name: store.storename,
                 avatar: store.image || '/profile.png',
                 likes: store.likes || 0,

@@ -256,7 +256,7 @@ export default function PurchaseDetailPage() {
                         <p className="text-sm text-muted-foreground">Qty: {item.quantity}</p>
                         {item.product && (
                           <Link 
-                            href={`/products/${item.product._id}`}
+                            href={`/products/${item.product?.slug || item.product?._id}`}
                             className="text-sm text-emerald-600 hover:underline"
                           >
                             View Product
@@ -307,7 +307,7 @@ export default function PurchaseDetailPage() {
                 <div>
                   <p className="font-medium">{order.sellerName || order.seller?.storename}</p>
                   <Link 
-                    href={`/stores/${order.seller._id}`}
+                    href={`/stores/${order.seller?.slug || order.seller?._id}`}
                     className="text-emerald-600 hover:underline"
                   >
                     Visit Store

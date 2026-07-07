@@ -198,7 +198,7 @@ export default function MapLibreStoresMap({ stores = [], onStoreSelect, isFullsc
             ${store.city && store.province ? `${store.city}, ${store.province}` : ''}
           </div>
           <a 
-            href="/stores/${store._id}" 
+            href="/stores/${store.slug || store._id}" 
             class="inline-block bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 transition-colors"
           >
             View Store →

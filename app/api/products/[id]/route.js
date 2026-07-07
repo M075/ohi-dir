@@ -2,6 +2,7 @@ import connectDB from "@/config/database";
 import Product from "@/models/Product";
 import Like from "@/models/Like";
 import { getSessionUser } from "@/utils/getSessionUser";
+import { resolveProduct, resolveProductId, isObjectId } from "@/utils/slugify";
 import { 
   uploadToImageKit, 
   deleteFromImageKit, 
@@ -10,7 +11,7 @@ import {
   getImagePresets
 } from "@/utils/imagekit";
 
-// GET /api/products/:id
+// GET /api/products/:id (id may be a slug, previousSlug, or ObjectId)
 export const GET = async (request, { params }) => {
   try {
     await connectDB();
@@ -23,22 +24,37 @@ export const GET = async (request, { params }) => {
       );
     }
     
-    const product = await Product.findById(id).lean();
-    
-    if (!product) {
+    const resolved = await resolveProduct(id);
+    if (!resolved) {
       return new Response(
         JSON.stringify({ message: "Product Not Found" }), 
         { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
+    // 301 redirect to the canonical slug URL when the request used a
+    // non-canonical identifier (legacy ObjectId or an old previousSlug).
+    const canonicalSlug = resolved.canonicalSlug;
+    if (resolved.redirectNeeded && canonicalSlug && id !== canonicalSlug) {
+      const url = new URL(`/products/${canonicalSlug}`, request.url);
+      return new Response(null, {
+        status: 301,
+        headers: {
+          Location: url.toString(),
+          'Cache-Control': 'public, max-age=86400',
+        },
+      });
+    }
+
+    const product = resolved.doc;
+    
     // Check if the current user has liked this product
     let isLiked = false;
     const sessionUser = await getSessionUser();
     if (sessionUser?.userId) {
       const existingLike = await Like.findOne({
         user: sessionUser.userId,
-        target: id,
+        target: String(product._id),
         targetType: 'Product',
       }).lean();
       isLiked = !!existingLike;
@@ -77,17 +93,26 @@ export const DELETE = async (request, { params }) => {
       );
     }
 
-    await connectDB();
-    const { id } = await params;
+  await connectDB();
+  const { id } = await params;
+  
+  if (!id) {
+    return new Response(
+      JSON.stringify({ message: "Product ID is required" }), 
+      { status: 400, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Accept slug, previousSlug, or ObjectId; resolve to ObjectId for DB ops.
+  const productId = isObjectId(id) ? id : await resolveProductId(id);
+  if (!productId) {
+    return new Response(
+      JSON.stringify({ message: "Product Not Found" }), 
+      { status: 404, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
     
-    if (!id) {
-      return new Response(
-        JSON.stringify({ message: "Product ID is required" }), 
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    const product = await Product.findById(id);
+  const product = await Product.findById(productId);
     
     if (!product) {
       return new Response(
@@ -181,7 +206,17 @@ export const PUT = async (request, { params }) => {
     }
     
     const formData = await request.formData();
-    const existingProduct = await Product.findById(id);
+
+    // Accept slug, previousSlug, or ObjectId; resolve to ObjectId for DB ops.
+    const productId = isObjectId(id) ? id : await resolveProductId(id);
+    if (!productId) {
+      return new Response(
+        JSON.stringify({ message: "Product not found" }), 
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const existingProduct = await Product.findById(productId);
 
     if (!existingProduct) {
       return new Response(
@@ -310,8 +345,37 @@ export const PUT = async (request, { params }) => {
       imageFileIds: `${imageFileIds.length} fileIds`
     });
 
+    // If the title is changing, regenerate a unique slug and remember the old one.
+    // (`findByIdAndUpdate` bypasses pre('save') hooks, so we do this manually.)
+    const newTitle = formData.get("title");
+    const oldTitle = existingProduct.title;
+    if (newTitle && oldTitle && String(newTitle).trim() !== String(oldTitle).trim()) {
+      const { toSlug, uniqueSlug } = await import('@/utils/slugify');
+      const root = toSlug(newTitle);
+      if (root) {
+        const exists = async (candidate, excludeId) => {
+          const q = { slug: candidate };
+          if (excludeId) q._id = { $ne: excludeId };
+          const f = await Product.findOne(q).select('_id').lean();
+          return !!f;
+        };
+        try {
+          const newSlug = await uniqueSlug(root, exists, { excludeId: productId });
+          if (existingProduct.slug && existingProduct.slug !== newSlug) {
+            await Product.updateOne(
+              { _id: productId },
+              { $addToSet: { previousSlugs: existingProduct.slug } }
+            );
+          }
+          productData.slug = newSlug;
+        } catch (err) {
+          console.warn('Could not regenerate Product slug on rename:', err.message);
+        }
+      }
+    }
+
     const updatedProduct = await Product.findByIdAndUpdate(
-      id,
+      productId,
       productData,
       { new: true, runValidators: true }
     );

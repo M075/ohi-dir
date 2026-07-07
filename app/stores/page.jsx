@@ -40,7 +40,8 @@ const StoresPage = () => {
     const prevStores = stores;
     setStores(
       stores.map((store) => {
-        if (store._id === storeId) {
+        // shop.id may now be a slug (preferred) or fallback _id; match either.
+        if (store._id === storeId || store.slug === storeId) {
           return {
             ...store,
             likes: store.isLiked ? Math.max(0, (store.likes || 0) - 1) : (store.likes || 0) + 1,
@@ -57,7 +58,7 @@ const StoresPage = () => {
       const data = await res.json();
       setStores(
         stores.map((store) =>
-          store._id === storeId
+          store._id === storeId || store.slug === storeId
             ? { ...store, isLiked: data.isLiked, likes: data.likes }
             : store
         )

@@ -83,7 +83,7 @@ const ProductCard = ({ product, onLike }) => {
       )}
 
       <h3 className="mt-2 text-sm text-gray-700 dark:text-gray-200">
-        <Link href={`/products/${product._id}`}>
+        <Link href={`/products/${product.slug || product._id}`}>
           <span className="absolute inset-0" />
           {product?.title}
         </Link>

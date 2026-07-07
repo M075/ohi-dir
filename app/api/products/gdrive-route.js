@@ -164,7 +164,7 @@ export const POST = async (request) => {
     await newProduct.save();
 
     return Response.redirect(
-      `${process.env.NEXTAUTH_URL}/products/${newProduct._id}`
+      `${process.env.NEXTAUTH_URL}/products/${newProduct.slug || newProduct._id}`
     );
 
   } catch (error) {

@@ -4,6 +4,7 @@ import User from '@/models/User';
 import Product from '@/models/Product';
 import Like from '@/models/Like';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { resolveStore, isObjectId } from '@/utils/slugify';
 
 export async function GET(request, { params }) {
   try {
@@ -18,19 +19,33 @@ export async function GET(request, { params }) {
       );
     }
 
-    const store = await User.findById(id)
-      .select('-bookmarks')
-      .lean();
-
-    if (!store) {
+    const resolved = await resolveStore(id);
+    if (!resolved) {
       return new Response(
         JSON.stringify({ message: 'Store not found' }),
         { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
+    // 301 redirect to the canonical slug URL when the request used a
+    // non-canonical identifier (legacy ObjectId or an old previousSlug).
+    const canonicalSlug = resolved.canonicalSlug;
+    if (resolved.redirectNeeded && canonicalSlug && id !== canonicalSlug) {
+      const url = new URL(`/stores/${canonicalSlug}`, request.url);
+      return new Response(null, {
+        status: 301,
+        headers: {
+          Location: url.toString(),
+          'Cache-Control': 'public, max-age=86400',
+        },
+      });
+    }
+
+    const store = resolved.doc;
+    const storeId = String(store._id);
+
     // Get product count for the store
-    const productCount = await Product.countDocuments({ owner: id });
+    const productCount = await Product.countDocuments({ owner: storeId });
 
     // Check if the current user has liked this store
     let isLiked = false;
@@ -38,7 +53,7 @@ export async function GET(request, { params }) {
     if (sessionUser?.userId) {
       const existingLike = await Like.findOne({
         user: sessionUser.userId,
-        target: id,
+        target: storeId,
         targetType: 'Store',
       })
         .lean();

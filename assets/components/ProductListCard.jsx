@@ -131,7 +131,7 @@ const ProductListCard = ({ product = {}, onLike }) => {
           >
             <Heart className={`h-4 w-4 ${product?.isLiked ? 'fill-current' : ''}`} />
           </Button>
-          <Link href={`/products/${product?._id || ""}`}>
+          <Link href={`/products/${product?.slug || product?._id || ""}`}>
             <Button size='icon' variant="outline">
               <Eye className="h-4 w-4" />
             </Button>

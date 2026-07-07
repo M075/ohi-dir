@@ -241,7 +241,7 @@ export default function StoresMapView({ stores = [], onStoreSelect }) {
                         )}
                       </div>
                       <a
-                        href={`/stores/${store._id}`}
+                        href={`/stores/${store.slug || store._id}`}
                         className="inline-block text-sm bg-emerald-600 text-white px-3 py-1 rounded hover:bg-emerald-700 transition-colors"
                       >
                         View Store →

@@ -1,7 +1,14 @@
 import connectDB from "@/config/database";
 import Product from "@/models/Product";
 import { getSessionUser } from "@/utils/getSessionUser";
+import { resolveProductId, isObjectId } from "@/utils/slugify";
 import mongoose from "mongoose";
+
+// Accept slug, previousSlug, or ObjectId; resolve to ObjectId for DB ops.
+async function resolveProductIdParam(id) {
+  if (!id) return null;
+  return isObjectId(id) ? id : await resolveProductId(id);
+}
 
 export async function POST(request, { params }) {
   try {
@@ -26,9 +33,17 @@ export async function POST(request, { params }) {
       });
     }
 
+    const productId = await resolveProductIdParam(id);
+    if (!productId) {
+      return new Response(JSON.stringify({ error: "Product not found" }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     // Find and update product with new review
     const updatedProduct = await Product.findByIdAndUpdate(
-      id,
+      productId,
       {
         $push: {
           review: {
@@ -77,12 +92,20 @@ export async function PUT(request, context) {
   try {
     await connectDB();
     const { params } = context;
-    const { id } = params;
+    const { id } = await params;
     const { reviewId, rating, comment } = await request.json();
+
+    const productId = await resolveProductIdParam(id);
+    if (!productId) {
+      return new Response(JSON.stringify({ error: "Product not found" }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
 
     const product = await Product.findOneAndUpdate(
       { 
-        _id: id,
+        _id: productId,
         'review._id': reviewId 
       },
       { 
@@ -122,12 +145,20 @@ export async function DELETE(request, context) {
   try {
     await connectDB();
     const { params } = context;
-    const { id } = params;
+    const { id } = await params;
     const { searchParams } = new URL(request.url);
     const reviewId = searchParams.get('reviewId');
 
+    const productId = await resolveProductIdParam(id);
+    if (!productId) {
+      return new Response(JSON.stringify({ error: "Product not found" }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
     const product = await Product.findByIdAndUpdate(
-      id,
+      productId,
       { $pull: { review: { _id: reviewId } } },
       { new: true }
     );

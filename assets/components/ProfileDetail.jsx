@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "@/components/hooks/use-toast";
-import { MapPin, Loader2, CheckCircle2, AlertCircle, Upload, X, Camera, Image as ImageIcon } from "lucide-react";
+import { MapPin, Loader2, CheckCircle2, AlertCircle, Upload, X, Camera, Image as ImageIcon, ChevronLeft } from "lucide-react";
 import { SkeletonLoader } from "@/components/ui/skeleton-loader";
 import { searchAddresses, extractAddressComponents } from "@/utils/addressAutocomplete";
 
@@ -313,11 +313,11 @@ const ProfileDetail = () => {
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-8">
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold">Profile Settings</h2>
-        <Button variant="outline" onClick={() => window.history.back()}>
-          Back
+      <div className="flex items-center space-x-4 mb-6">
+        <Button className="h-8 w-8 p-0" variant="outline" onClick={() => window.history.back()}>
+          <ChevronLeft className="h-4 w-4" />
         </Button>
+        <h2 className="text-3xl font-bold">Profile Settings</h2>
       </div>
 
       {/* Show skeleton while loading */}
@@ -325,33 +325,7 @@ const ProfileDetail = () => {
         <SkeletonLoader type="profile" />
       ) : (
         <>
-          {/* Geocoding Status Alert */}
-          {formData.latitude && formData.longitude && (
-            <Alert className={geocodeStatus === 'success' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950' : ''}>
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              <AlertDescription className="text-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <strong>Location Set:</strong> {formData.latitude.toFixed(4)}, {formData.longitude.toFixed(4)}
-                    {formData.geocodedAt && (
-                      <span className="text-xs text-gray-500 ml-2">
-                        (Last updated: {new Date(formData.geocodedAt).toLocaleDateString()})
-                      </span>
-                    )}
-                  </div>
-                  {/* <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGeocode}
-                    disabled={geocoding}
-                  >
-                    Update Location
-                  </Button> */}
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-
+         
       {/* Cover Image Upload */}
       <div className="relative w-full h-48 rounded-lg overflow-hidden bg-zinc-100 dark:bg-zinc-800 border-2 border-dashed border-zinc-300 dark:border-zinc-600">
         {formData.coverImage ? (
@@ -566,7 +540,7 @@ const ProfileDetail = () => {
         </div>
 
         <div className="flex justify-end space-x-4">
-          <Button variant="outline" type="button">
+          <Button variant="outline" type="button" onClick={() => window.history.back()}>
             Cancel
           </Button>
           <Button type="submit" disabled={loading}>

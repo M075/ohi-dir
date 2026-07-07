@@ -124,7 +124,7 @@ export default function CartPage() {
                   return (
                     <li key={item._id} className="flex py-6 sm:py-10">
                       <div className="flex-shrink-0">
-                        <Link href={`/products/${product?._id}`}>
+                        <Link href={`/products/${product?.slug || product?._id}`}>
                           <Image
                             alt={item.productSnapshot.title}
                             src={product?.images?.[0] || item.productSnapshot.image || '/image.png'}
@@ -141,7 +141,7 @@ export default function CartPage() {
                             <div className="pr-6">
                               <h3 className="text-sm">
                                 <Link
-                                  href={`/products/${product?._id}`}
+                                  href={`/products/${product?.slug || product?._id}`}
                                   className="font-medium text-gray-700 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white"
                                 >
                                   {product?.title || item.productSnapshot.title}

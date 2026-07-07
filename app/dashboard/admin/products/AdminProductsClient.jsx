@@ -292,7 +292,7 @@ export default function AdminProductsClient() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
-                            <Link href={`/products/${product._id}`}>
+                            <Link href={`/products/${product.slug || product._id}`}>
                               <Button size="sm" variant="ghost" title="View">
                                 <Eye className="h-4 w-4" />
                               </Button>
