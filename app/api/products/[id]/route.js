@@ -32,22 +32,8 @@ export const GET = async (request, { params }) => {
       );
     }
 
-    // 301 redirect to the canonical slug URL when the request used a
-    // non-canonical identifier (legacy ObjectId or an old previousSlug).
-    const canonicalSlug = resolved.canonicalSlug;
-    if (resolved.redirectNeeded && canonicalSlug && id !== canonicalSlug) {
-      const url = new URL(`/products/${canonicalSlug}`, request.url);
-      return new Response(null, {
-        status: 301,
-        headers: {
-          Location: url.toString(),
-          'Cache-Control': 'public, max-age=86400',
-        },
-      });
-    }
-
     const product = resolved.doc;
-    
+
     // Check if the current user has liked this product
     let isLiked = false;
     const sessionUser = await getSessionUser();

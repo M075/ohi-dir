@@ -203,7 +203,7 @@ const ProductsTable = () => {
                     </div>
 
                     <div className="flex items-center mt-3 sm:mt-0 sm:ml-4">
-                      <Link href={`/dashboard/products/edit/${product._id}`} data-oid="jdygsod">
+                      <Link href={`/dashboard/products/edit/${product.slug || product._id}`} data-oid="jdygsod">
                         <Button className="mr-2" variant="outline" size="sm" data-oid=".yv3q3d">
                           <Pencil className="h-4 w-4" data-oid="oz3-ukl" />
                         </Button>

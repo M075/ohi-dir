@@ -42,17 +42,61 @@ import { useMessages } from "@/assets/contexts/MessagesContext";
 import { useSession } from "next-auth/react";
 import UpgradeToSellerButton from "./UpgradeToSellerButton";
 
-const breadcrumbs = [
-  { label: "Dashboard", link: "/dashboard" },
-  { label: "Products", link: "/dashboard/products" },
-  { label: "Edit Products", link: "/dashboard/products" },
-];
+// Known path segment → readable label mapping
+const SEGMENT_LABELS = {
+  dashboard: "Dashboard",
+  profile: "Profile",
+  products: "Products",
+  add: "Add Product",
+  edit: "Edit Product",
+  orders: "Orders",
+  messages: "Messages",
+  purchases: "Purchases",
+  wallet: "Wallet",
+  favourites: "Favourites",
+  "list-files": "Files",
+  admin: "Admin",
+  buyers: "Buyers",
+  stores: "Stores",
+  settings: "Settings",
+};
+
+function generateBreadcrumbsFromPath(pathname) {
+  if (!pathname) return [{ label: "Dashboard", link: "/dashboard" }];
+
+  const segments = pathname.split("/").filter(Boolean);
+  const crumbs = [];
+  let accumulated = "";
+
+  for (const segment of segments) {
+    accumulated += "/" + segment;
+
+    // Use the label map, or derive a readable label
+    let label = SEGMENT_LABELS[segment];
+    if (!label) {
+      // Check if it looks like a MongoDB ObjectId (24 hex chars)
+      if (/^[a-f\d]{24}$/i.test(segment)) {
+        label = "Details";
+      } else {
+        // Capitalize and replace hyphens/dashes
+        label = segment
+          .split(/[-_]/)
+          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ");
+      }
+    }
+
+    crumbs.push({ label, link: accumulated });
+  }
+
+  return crumbs;
+}
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(" ");
 }
 
-export default function DashboardShell({ children }) {
+export default function DashboardShell({ children, breadcrumbs: breadcrumbsProp }) {
   const { data: session } = useSession();
   const { unreadCount } = useMessages();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -360,20 +404,25 @@ export default function DashboardShell({ children }) {
               className="h-6 w-px bg-zinc-900/10 lg:hidden"
             />
 
+            {/* Breadcrumbs: use prop if passed, otherwise auto-generate from URL */}
+            {(() => {
+              const crumbs = breadcrumbsProp || generateBreadcrumbsFromPath(pathname);
+              return (
             <Breadcrumb className="hidden md:flex">
               <BreadcrumbList>
-                {breadcrumbs.map((breadcrumb, index) => (
+                {crumbs.map((breadcrumb, index) => (
                   <React.Fragment key={index}>
                     <BreadcrumbItem>
                       <BreadcrumbLink asChild>
                         <Link href={breadcrumb.link}>{breadcrumb.label}</Link>
                       </BreadcrumbLink>
                     </BreadcrumbItem>
-                    {index < breadcrumbs.length - 1 && <BreadcrumbSeparator />}
+                    {index < crumbs.length - 1 && <BreadcrumbSeparator />}
                   </React.Fragment>
                 ))}
               </BreadcrumbList>
             </Breadcrumb>
+              )})()}
 
             <div className="relative flex-1 md:flex-initial">
               <Search className="absolute left-2.5 top-3 h-4 w-4 text-muted-foreground" />

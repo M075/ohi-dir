@@ -67,9 +67,9 @@ export const authOptions = {
   callbacks: {
     async signIn({ user, account, profile }) {
       await connectDB();
-      
-      const userExists = await User.findOne({ 
-        email: user.email || profile?.email 
+
+      const userExists = await User.findOne({
+        email: user.email || profile?.email
       });
 
       if (!userExists) {
@@ -87,56 +87,36 @@ export const authOptions = {
           authProvider: account.provider,
           role: 'buyer', // Default to buyer
         });
-        
+
+        // Override the OAuth provider ID with MongoDB _id so the JWT token
+        // stores the correct user identifier for database queries.
+        user.id = newUser._id.toString();
         user.role = newUser.role;
         user.isAdmin = newUser.isAdmin || false;
         user.adminRole = newUser.adminRole || null;
       } else {
+        user.id = userExists._id.toString();
         user.role = userExists.role || 'buyer';
         user.isAdmin = userExists.isAdmin || false;
         user.adminRole = userExists.adminRole || null;
       }
-      
+
       return true;
     },
 
     async session({ session, token }) {
-      await connectDB();
-      
-      let user = await User.findOne({ email: session.user.email });
-      
-      if (!user) {
-        try {
-          const emailLocal = (session.user.email || '').split('@')[0] || '';
-          const defaultStoreName = emailLocal
-            .replace(/\./g, ' ')
-            .replace(/[^a-z0-9-_]/gi, '')
-            .toLowerCase();
-          
-          user = await User.create({
-            email: session.user.email,
-            storename: defaultStoreName,
-            image: session.user.image,
-            isOnboarded: false,
-            authProvider: 'oauth',
-            role: 'buyer',
-          });
-        } catch (error) {
-          console.error('Error creating user in session callback:', error);
-          return session;
-        }
+      // With JWT strategy, the token already has all user data.
+      // Avoid a database round-trip on EVERY page navigation.
+      if (token) {
+        session.user.id = token.id || token.sub;
+        session.user.isOnboarded = token.isOnboarded;
+        session.user.storename = token.storename;
+        session.user.role = token.role || 'buyer';
+        session.user.isAdmin = token.isAdmin || false;
+        session.user.adminRole = token.adminRole || null;
+        session.user.adminPermissions = token.adminPermissions || [];
       }
-      
-      if (user) {
-        session.user.id = user._id.toString();
-        session.user.isOnboarded = user.isOnboarded || false;
-        session.user.storename = user.storename;
-        session.user.role = user.role || 'buyer'; // ADDED
-        session.user.isAdmin = user.isAdmin || false;
-        session.user.adminRole = user.adminRole || null;
-        session.user.adminPermissions = user.adminPermissions || [];
-      }
-      
+
       return session;
     },
 
@@ -150,29 +130,30 @@ export const authOptions = {
       }
       
       if (trigger === 'update' && session) {
-        token.isOnboarded = session.user.isOnboarded;
-        token.storename = session.user.storename;
-        token.role = session.user.role; // ADDED
-        token.isAdmin = session.user.isAdmin;
-        token.adminRole = session.user.adminRole;
-      }
-      
-      if (token.email && !token.role) {
-        try {
-          await connectDB();
-          const user = await User.findOne({ email: token.email });
-          if (user) {
-            token.isOnboarded = user.isOnboarded || false;
-            token.storename = user.storename;
-            token.role = user.role || 'buyer'; // ADDED
-            token.isAdmin = user.isAdmin || false;
-            token.adminRole = user.adminRole || null;
-          }
-        } catch (error) {
-          console.error('JWT callback error:', error);
+        if (session.user) {
+          token.role = session.user.role ?? token.role;
+          token.isAdmin = session.user.isAdmin ?? token.isAdmin;
+          token.adminRole = session.user.adminRole ?? token.adminRole;
+          token.isOnboarded = session.user.isOnboarded ?? token.isOnboarded;
+          token.storename = session.user.storename ?? token.storename;
         }
       }
       
+      // Migration: tokens created before signIn overrode the user id with MongoDB
+      // ObjectId still hold the OAuth provider's numeric ID. Fix it once.
+      if (token.email && token.id && !/^[0-9a-f]{24}$/i.test(token.id)) {
+        try {
+          await connectDB();
+          const dbUser = await User.findOne({ email: token.email }).select('_id role');
+          if (dbUser) {
+            token.id = dbUser._id.toString();
+            if (!token.role) token.role = dbUser.role || 'buyer';
+          }
+        } catch {
+          // Network down — skip migration, next refresh will retry.
+        }
+      }
+
       return token;
     },
 

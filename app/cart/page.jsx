@@ -271,7 +271,7 @@ export default function CartPage() {
       </main>
 
       {/* Policy grid */}
-      <section aria-labelledby="policies-heading" className="border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-zinc-800">
+      {/* <section aria-labelledby="policies-heading" className="border-t border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-zinc-800">
         <h2 id="policies-heading" className="sr-only">
           Our policies
         </h2>
@@ -296,7 +296,7 @@ export default function CartPage() {
             ))}
           </div>
         </div>
-      </section>
+      </section> */}
     </div>
   );
 }

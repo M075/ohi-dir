@@ -52,7 +52,7 @@ const ProductCard = ({ product, onLike }) => {
   };
 
   return (
-    <div className="group relative">
+    <div className="group relative h-full flex flex-col">
       {/* Like button positioned absolutely */}
       <button
         type="button"
@@ -77,12 +77,12 @@ const ProductCard = ({ product, onLike }) => {
       </div>
 
       {product?.ownerName && (
-        <span className="mt-4 inline-block text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
+        <span className="mt-4 inline-block self-start text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
           {product.ownerName}
         </span>
       )}
 
-      <h3 className="mt-2 text-sm text-gray-700 dark:text-gray-200">
+      <h3 className="mt-2 text-sm text-gray-700 dark:text-gray-200 line-clamp-2 min-h-[2.5rem]">
         <Link href={`/products/${product.slug || product._id}`}>
           <span className="absolute inset-0" />
           {product?.title}
@@ -107,7 +107,7 @@ const ProductCard = ({ product, onLike }) => {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mt-auto">
         <div>
           {product?.discountPercentage > 0 && (
             <span className="line-through mr-2 text-sm text-gray-500 dark:text-gray-400">

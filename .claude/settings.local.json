@@ -7,7 +7,8 @@
       "Bash(node --check scripts/verify-slugs.mjs)",
       "Bash(node --check scripts/backfill-slugs.mjs)",
       "Bash(node --check models/User.js)",
-      "Bash(node --check models/Product.js)"
+      "Bash(node --check models/Product.js)",
+      "Bash(node *)"
     ]
   }
 }

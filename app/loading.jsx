@@ -1,80 +1,36 @@
-import logo from "@/public/logo.png";
-
 const Loading = () => {
   return (
-    <div data-oid="ac0yemk">
-      <CutoutTextLoader
-        height="780px"
-        background="black"
-        darkBackground="white"
-        // NOTE: Using GIFs for the background looks super cool :)
-        imgUrlDesktop="https://plus.unsplash.com/premium_photo-1723575832464-2c0c772593b2?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&q=80&w=870"
-        imgUrlMobile="https://images.unsplash.com/photo-1588153990953-7c681e89682a?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&q=80&w=391"
-        data-oid="r-1pgwo"
-      />
-    </div>
-  );
-};
-
-const CutoutTextLoader = ({ height, background, darkBackground, imgUrlDesktop, imgUrlMobile }) => {
-  return (
-    <div className="relative" style={{ height }} data-oid="nqa3ocg">
-      {/* Desktop background (visible on md and up) */}
+    <div className="fixed inset-0 z-50" data-oid="ac0yemk">
+      {/* Desktop background */}
       <div
         className="absolute inset-0 z-0 hidden md:block"
         style={{
-          backgroundImage: `url(${imgUrlDesktop})`,
+          backgroundImage: "url(https://plus.unsplash.com/premium_photo-1723575832464-2c0c772593b2?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&q=80&w=870)",
           backgroundPosition: "center",
           backgroundSize: "cover",
         }}
-        data-oid="7_pcuf6_desktop"
       />
 
-      {/* Mobile background (visible below md) */}
+      {/* Mobile background */}
       <div
         className="absolute inset-0 z-0 md:hidden"
         style={{
-          backgroundImage: `url(${imgUrlMobile})`,
+          backgroundImage: "url(https://images.unsplash.com/photo-1588153990953-7c681e89682a?ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&q=80&w=391)",
           backgroundPosition: "center",
           backgroundSize: "cover",
         }}
-        data-oid="7_pcuf6_mobile"
       />
 
-      <div
-        className={`absolute inset-0 animate-pulse z-10 bg-${background} dark:bg-${darkBackground}`}
-        data-oid="s8j2bou"
-      />
+      {/* Overlay — white in light mode, black in dark mode */}
+      <div className="absolute inset-0 z-10 bg-white/80 dark:bg-black/80" />
 
-      {/* Text with desktop background image */}
-      <span
-        className="font-black dark:text-zinc-50/20 absolute inset-0 z-20 text-center bg-clip-text text-transparent pointer-events-none hidden md:block"
-        style={{
-          backgroundImage: `url(${imgUrlDesktop})`,
-          backgroundPosition: "center",
-          backgroundSize: "cover",
-          fontSize: "clamp(3rem, 12vw, 10rem)",
-          lineHeight: height,
-        }}
-        data-oid="ja2vlrz_desktop"
-      >
-        Loading...
-      </span>
-
-      {/* Text with mobile background image */}
-      <span
-        className="font-black absolute inset-0 z-20 text-center bg-clip-text text-transparent pointer-events-none md:hidden"
-        style={{
-          backgroundImage: `url(${imgUrlMobile})`,
-          backgroundPosition: "center",
-          backgroundSize: "cover",
-          fontSize: "clamp(3rem, 12vw, 10rem)",
-          lineHeight: height,
-        }}
-        data-oid="ja2vlrz_mobile"
-      >
-        Loading...
-      </span>
+      {/* Content */}
+      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-black/20 border-t-black dark:border-white/20 dark:border-t-white" />
+        <span className="text-lg font-semibold text-black dark:text-white">
+          Loading...
+        </span>
+      </div>
     </div>
   );
 };

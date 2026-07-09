@@ -1,6 +1,7 @@
-// components/UpgradeToSellerButton.jsx - NEW COMPONENT
+// components/UpgradeToSellerButton.jsx - Updated with dynamic fee & instant session update
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,13 +12,32 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Store, Check } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 import { toast } from '@/components/hooks/use-toast';
 
 export default function UpgradeToSellerButton() {
+  const { data: session, update } = useSession();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [commissionPercentage, setCommissionPercentage] = useState(null);
+  const [feeLoading, setFeeLoading] = useState(true);
+
+  // Fetch the platform commission from admin settings when the dialog opens
+  useEffect(() => {
+    if (open && commissionPercentage === null) {
+      setFeeLoading(true);
+      fetch('/api/admin/settings')
+        .then((res) => res.ok ? res.json() : null)
+        .then((data) => {
+          setCommissionPercentage(data?.commissionPercentage ?? 15);
+        })
+        .catch(() => {
+          setCommissionPercentage(0);
+        })
+        .finally(() => setFeeLoading(false));
+    }
+  }, [open, commissionPercentage]);
 
   const handleUpgrade = async () => {
     setLoading(true);
@@ -33,12 +53,21 @@ export default function UpgradeToSellerButton() {
 
       toast({
         title: "Success!",
-        description: "Your account has been upgraded to seller. Please complete your store setup.",
+        description: "Your account has been upgraded to seller.",
       });
 
-      // Redirect to onboarding or profile setup
-      router.push('/dashboard/profile');
+      // Update the JWT token in-place so the session has the new role
+      // without requiring the user to sign out and back in.
+      if (update) {
+        await update({ user: { role: 'seller' } });
+      }
+
       setOpen(false);
+
+      // Redirect to the seller dashboard — the sidebar will now show
+      // seller navigation because the session already has role='seller'.
+      router.push('/dashboard');
+      router.refresh();
     } catch (error) {
       toast({
         title: "Error",
@@ -49,6 +78,8 @@ export default function UpgradeToSellerButton() {
       setLoading(false);
     }
   };
+
+  const fee = commissionPercentage ?? 15;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -107,12 +138,23 @@ export default function UpgradeToSellerButton() {
           </div>
 
           <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-lg">
-            <p className="text-sm font-medium text-emerald-900 dark:text-emerald-100">
-              Platform Fee: 5%
-            </p>
-            <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
-              We only charge when you make a sale
-            </p>
+            {feeLoading ? (
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
+                <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                  Loading platform fee...
+                </p>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm font-medium text-emerald-900 dark:text-emerald-100">
+                  Platform Fee: {fee}%
+                </p>
+                <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
+                  We only charge when you make a sale
+                </p>
+              </>
+            )}
           </div>
         </div>
 
@@ -126,8 +168,9 @@ export default function UpgradeToSellerButton() {
           </Button>
           <Button
             onClick={handleUpgrade}
-            disabled={loading}
-            className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+            disabled={loading || feeLoading}
+            className="flex-1"
+            variant='default'
           >
             {loading ? 'Upgrading...' : 'Upgrade Now'}
           </Button>
