@@ -22,14 +22,13 @@ const ToastViewport = React.forwardRef(({ className, ...props }, ref) => (
 ToastViewport.displayName = ToastPrimitives.Viewport.displayName;
 
 const toastVariants = cva(
-  "group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border p-6 pr-8 shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full",
+  "group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border p-6 pr-8 shadow-sm transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full",
   {
     variants: {
       variant: {
-        default: "border bg-background text-foreground",
-        destructive:
-          "destructive group border-destructive bg-background/70 text-destructive backdrop-blur-md",
-        success: "border-success bg-background/70 text-success backdrop-blur-md",
+        default: "border bg-white text-gray-900 shadow-sm dark:bg-zinc-950 dark:text-gray-100 dark:border-zinc-800",
+        destructive: "border-red-200 bg-white text-gray-900 shadow-sm dark:bg-zinc-950 dark:border-red-900/30 dark:text-gray-100",
+        success: "border-green-200 bg-white text-gray-900 shadow-sm dark:bg-zinc-950 dark:border-green-900/30 dark:text-gray-100",
       },
     },
     defaultVariants: {
@@ -67,7 +66,11 @@ const ToastClose = React.forwardRef(({ className, ...props }, ref) => (
   <ToastPrimitives.Close
     ref={ref}
     className={cn(
-      "absolute right-2 top-2 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-2 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600",
+      "absolute right-2 top-2 rounded-md p-1 opacity-0 transition-opacity hover:opacity-100 group-hover:opacity-100",
+      "text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300",
+      "group-data-[variant=destructive]:text-red-400 group-data-[variant=destructive]:hover:text-red-500",
+      "group-data-[variant=success]:text-green-400 group-data-[variant=success]:hover:text-green-500",
+      "group-data-[variant=default]:text-emerald-400 group-data-[variant=default]:hover:text-emerald-500",
       className,
     )}
     toast-close=""
@@ -82,7 +85,13 @@ ToastClose.displayName = ToastPrimitives.Close.displayName;
 const ToastTitle = React.forwardRef(({ className, ...props }, ref) => (
   <ToastPrimitives.Title
     ref={ref}
-    className={cn("text-sm font-semibold", className)}
+    className={cn(
+      "text-sm font-semibold",
+      "group-data-[variant=destructive]:text-red-600 dark:group-data-[variant=destructive]:text-red-400",
+      "group-data-[variant=success]:text-emerald-600 dark:group-data-[variant=success]:text-emerald-400",
+      "group-data-[variant=default]:text-emerald-600 dark:group-data-[variant=default]:text-emerald-400",
+      className,
+    )}
     {...props}
     data-oid="tu-8s_y"
   />
@@ -92,7 +101,13 @@ ToastTitle.displayName = ToastPrimitives.Title.displayName;
 const ToastDescription = React.forwardRef(({ className, ...props }, ref) => (
   <ToastPrimitives.Description
     ref={ref}
-    className={cn("text-sm opacity-90", className)}
+    className={cn(
+      "text-sm opacity-90",
+      "group-data-[variant=destructive]:text-gray-600 dark:group-data-[variant=destructive]:text-gray-400",
+      "group-data-[variant=success]:text-gray-600 dark:group-data-[variant=success]:text-gray-400",
+      "group-data-[variant=default]:text-gray-600 dark:group-data-[variant=default]:text-gray-400",
+      className,
+    )}
     {...props}
     data-oid="sbjcmes"
   />
