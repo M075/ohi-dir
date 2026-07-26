@@ -42,10 +42,12 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  Star,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useToast } from "@/components/hooks/use-toast";
+import { isFeatured, MAX_FEATURED } from "@/utils/featured";
 
 const statusConfig = {
   active: { label: "Active", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300" },
@@ -162,7 +164,8 @@ export default function AdminProductsClient() {
         <div>
           <h1 className="text-3xl font-bold">Products Management</h1>
           <p className="text-muted-foreground">
-            Manage all products on the platform
+            Manage all products on the platform &middot; feature up to{" "}
+            {MAX_FEATURED} products for the storefront carousel
           </p>
         </div>
       </div>
@@ -190,6 +193,7 @@ export default function AdminProductsClient() {
                 <SelectItem value="suspended">Suspended</SelectItem>
                 <SelectItem value="flagged">Flagged</SelectItem>
                 <SelectItem value="lowstock">Low Stock</SelectItem>
+                <SelectItem value="featured">Featured</SelectItem>
               </SelectContent>
             </Select>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -236,12 +240,14 @@ export default function AdminProductsClient() {
                     <TableHead>Stock</TableHead>
                     <TableHead>Seller</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Featured</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {products.map((product) => {
                     const status = getProductStatus(product);
+                    const featured = isFeatured(product.featured);
                     return (
                       <TableRow key={product._id}>
                         <TableCell>
@@ -289,6 +295,35 @@ export default function AdminProductsClient() {
                           <Badge className={statusConfig[status]?.color}>
                             {statusConfig[status]?.label}
                           </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="sm"
+                            variant={featured ? "secondary" : "ghost"}
+                            title={
+                              featured
+                                ? "Remove from featured carousel"
+                                : "Add to featured carousel"
+                            }
+                            onClick={() =>
+                              handleProductAction(
+                                product._id,
+                                featured ? "unfeature" : "feature"
+                              )
+                            }
+                            className="gap-1.5"
+                          >
+                            <Star
+                              className={`h-4 w-4 ${
+                                featured
+                                  ? "fill-emerald-500 text-emerald-500"
+                                  : "text-muted-foreground"
+                              }`}
+                            />
+                            <span className="text-xs">
+                              {featured ? "Featured" : "Feature"}
+                            </span>
+                          </Button>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">

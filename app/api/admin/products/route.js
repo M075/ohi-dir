@@ -3,6 +3,7 @@ import connectDB from '@/config/database';
 import Product from '@/models/Product';
 import User from '@/models/User';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { featuredQuery } from '@/utils/featured';
 import mongoose from 'mongoose';
 
 export async function GET(request) {
@@ -47,6 +48,8 @@ export async function GET(request) {
         query.status = 'suspended';
       } else if (status === 'lowstock') {
         query.stock = { $lt: 10 };
+      } else if (status === 'featured') {
+        Object.assign(query, featuredQuery);
       }
     }
 

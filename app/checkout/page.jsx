@@ -729,9 +729,9 @@ export default function CheckoutPage() {
   const sellerCount = Object.keys(itemsBySeller).length;
 
   return (
-    <div className="pb-12 sm:pb-0 min-h-screen bg-gray-50 dark:bg-zinc-900">
+    <div className="pb-12 sm:pb-0 sm:pt-14 min-h-screen bg-gray-50 dark:bg-zinc-900">
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-8">Checkout</h1>
+        <h1 className="text-3xl font-bold mb-8 text-center">Checkout</h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column - Forms */}

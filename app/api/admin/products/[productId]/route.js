@@ -2,6 +2,7 @@ import connectDB from '@/config/database';
 import Product from '@/models/Product';
 import User from '@/models/User';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { featuredQuery, FEATURED_ON, FEATURED_OFF, MAX_FEATURED } from '@/utils/featured';
 
 
 // app/api/admin/products/[productId]/route.js
@@ -54,6 +55,26 @@ export async function PATCH(request, { params }) {
       case 'unflag':
         product.flagged = false;
         product.flagReason = null;
+        break;
+      case 'feature': {
+        // Enforce a maximum of MAX_FEATURED featured products (drives the carousel).
+        const featuredCount = await Product.countDocuments({
+          ...featuredQuery,
+          _id: { $ne: productId },
+        });
+        if (featuredCount >= MAX_FEATURED) {
+          return new Response(
+            JSON.stringify({
+              error: `You can only feature up to ${MAX_FEATURED} products. Unfeature another product first.`,
+            }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        product.featured = FEATURED_ON;
+        break;
+      }
+      case 'unfeature':
+        product.featured = FEATURED_OFF;
         break;
       case 'delete':
         await Product.findByIdAndDelete(productId);
