@@ -13,6 +13,7 @@ import { Store, Package, CreditCard, Loader2, MapPin, Truck } from 'lucide-react
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { searchAddresses, extractAddressComponents } from '@/utils/addressAutocomplete';
 import { calculateRequiredLockerSize, LOCKER_SIZES } from '@/utils/courierServices';
+import Loading from '@/app/loading';
 
 const PAYFAST_STORAGE_KEY = 'payfast:lastPaymentId';
 const DEFAULT_SHIPPING_METHOD = 'standard';
@@ -673,14 +674,7 @@ export default function CheckoutPage() {
 
   // Loading state
   if (status === 'loading' || cartLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-zinc-900 mt-16">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
+    return <Loading />;
   }
 
   // Empty cart state
