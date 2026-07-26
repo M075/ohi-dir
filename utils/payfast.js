@@ -15,6 +15,34 @@ export const isPayFastITNEnabled = () => {
   return !disabledFlags.includes(flag.toLowerCase());
 };
 
+/**
+ * Decide whether to use the PayFast sandbox.
+ *
+ * IMPORTANT: this intentionally does NOT rely on NODE_ENV. Next.js controls
+ * NODE_ENV from the run command (`next dev` = development, `next start` =
+ * production) and ignores any NODE_ENV you set in .env files, so it can't be
+ * used as a live/sandbox switch. Use an explicit variable instead:
+ *
+ *   PAYFAST_MODE=live        -> production (also: production | prod)
+ *   PAYFAST_MODE=sandbox     -> sandbox (also: test)
+ *   PAYFAST_SANDBOX=false    -> production (also: 0 | off | no | disabled)
+ *   PAYFAST_SANDBOX=true     -> sandbox
+ *
+ * If neither is set, falls back to the old behaviour (sandbox unless the
+ * process itself is running in production).
+ */
+export const isPayFastSandbox = () => {
+  const mode = (process.env.PAYFAST_MODE || '').toLowerCase().trim();
+  if (mode === 'live' || mode === 'production' || mode === 'prod') return false;
+  if (mode === 'sandbox' || mode === 'test') return true;
+
+  const flag = (process.env.PAYFAST_SANDBOX || '').toLowerCase().trim();
+  if (flag) return !disabledFlags.includes(flag);
+
+  // Backwards-compatible fallback.
+  return process.env.NODE_ENV !== 'production';
+};
+
 // Field order prescribed by PayFast documentation (Custom Integration -> Step 2)
 const PAYFAST_FIELD_ORDER = [
   'merchant_id',
@@ -103,9 +131,15 @@ export function createPayFastPayment(orders, returnUrl, cancelUrl, notifyUrl) {
   const merchantId = process.env.PAYFAST_MERCHANT_ID;
   const merchantKey = process.env.PAYFAST_MERCHANT_KEY;
   const passPhrase = process.env.PAYFAST_PASSPHRASE;
-  
-  // Use sandbox in development
-  const useSandbox = process.env.NODE_ENV !== 'production';
+
+  // Sandbox vs live is driven by an explicit env var, NOT NODE_ENV.
+  const useSandbox = isPayFastSandbox();
+
+  if (!useSandbox && (!merchantId || !merchantKey)) {
+    console.warn(
+      '⚠️ PayFast live mode is enabled but PAYFAST_MERCHANT_ID / PAYFAST_MERCHANT_KEY are missing.'
+    );
+  }
 
   // Handle single order or array of orders
   const orderArray = Array.isArray(orders) ? orders : [orders];
