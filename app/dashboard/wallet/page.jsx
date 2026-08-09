@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback } from 'react';
 import DashboardShell from '@/assets/components/DashboardShell';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -427,7 +427,7 @@ export default function SellerWalletDashboard() {
             </Button>
             <Dialog open={payoutDialogOpen} onOpenChange={setPayoutDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-emerald-600 hover:bg-emerald-700">
+                <Button variant='default'>
                   <Plus className="h-4 w-4 mr-2" />
                   Request Payout
                 </Button>
@@ -468,9 +468,9 @@ export default function SellerWalletDashboard() {
                   </Button>
                   <Button
                     type="button"
+                    variant="success"
                     onClick={handlePayoutRequest}
                     disabled={requestingPayout || walletData.balance < MINIMUM_PAYOUT}
-                    className="bg-emerald-600 hover:bg-emerald-700"
                   >
                     {requestingPayout ? (
                       <>
@@ -618,9 +618,8 @@ export default function SellerWalletDashboard() {
         </div>
 
         {/* Tabs */}
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
               <div className="flex gap-2">
                 <Button
                   variant={activeTab === 'overview' ? 'default' : 'outline'}
@@ -669,9 +668,7 @@ export default function SellerWalletDashboard() {
                 </div>
               )}
             </div>
-          </CardHeader>
-
-          <CardContent>
+          <div>
             {activeTab === 'overview' && (
               <div className="space-y-6">
                 <div>
@@ -1011,8 +1008,8 @@ export default function SellerWalletDashboard() {
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
         </>
         )}
       </div>

@@ -130,21 +130,17 @@ const ProductsTable = () => {
   };
 
   return (
-    <Card className="sm:w-11/12 mx-auto -mt-4 sm:mt-2 border-none bg-zinc-100 dark:bg-zinc-900" data-oid="y.qvo25">
-      <CardHeader className="flex flex-row " data-oid="-um8bbl">
-        <CardTitle data-oid="54xqb8g">Products</CardTitle>
-        <Link
-          className="ml-auto"
-          href="/dashboard/products/add"
-          data-oid="9yen0nk"
-        >
-          <Button className="-mt-4" data-oid="33:rv8u">
-            <PlusCircle className="sm:mr-2 h-4 w-4" data-oid="zdp2ibn" />
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold">Products</h1>
+        <Link href="/dashboard/products/add">
+          <Button>
+            <PlusCircle className="sm:mr-2 h-4 w-4" />
             <span className="hidden sm:block">Add Product</span>
           </Button>
         </Link>
-      </CardHeader>
-      <CardContent data-oid="_9ki271">
+      </div>
+      <div>
         {products.length === 0 ? (
           <div
             className="flex flex-col items-center justify-center pb-8"
@@ -163,18 +159,18 @@ const ProductsTable = () => {
               {products
                 .slice((page - 1) * rowsPerPage, page * rowsPerPage)
                 .map((product) => (
-                  <div
+                  <Card
                     key={product._id}
-                    className="flex flex-col sm:flex-row items-center justify-between p-4 border-none bg-white dark:bg-zinc-800 rounded-lg hover:bg-muted/50 transition-colors"
+                    className="bg-zinc-100 dark:bg-zinc-800/90 hover:shadow-md transition-shadow"
                   >
+                    <CardContent className="flex flex-col sm:flex-row items-center justify-between p-4">
                     <div className="flex items-center gap-4 w-full">
-                      <div className="w-20 h-16 rounded-md overflow-hidden bg-muted flex-shrink-0 relative">
+                      <div className="w-32 h-20 rounded-md overflow-hidden bg-muted flex-shrink-0 relative">
                         {product.images?.[0] ? (
                           <Image
                             src={product.images[0]}
                             alt={product.title}
-                            width={160}
-                            height={120}
+                            fill
                             className="object-cover"
                           />
                         ) : (
@@ -204,7 +200,7 @@ const ProductsTable = () => {
 
                     <div className="flex items-center mt-3 sm:mt-0 sm:ml-4">
                       <Link href={`/dashboard/products/edit/${product.slug || product._id}`} data-oid="jdygsod">
-                        <Button className="mr-2" variant="outline" size="sm" data-oid=".yv3q3d">
+                        <Button className="mr-2" variant="success" size="sm" data-oid=".yv3q3d">
                           <Pencil className="h-4 w-4" data-oid="oz3-ukl" />
                         </Button>
                       </Link>
@@ -229,7 +225,8 @@ const ProductsTable = () => {
                         </AlertDialogContent>
                       </AlertDialog>
                     </div>
-                  </div>
+                    </CardContent>
+                  </Card>
                 ))}
             </div>
 
@@ -260,8 +257,8 @@ const ProductsTable = () => {
             </div>
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 };
 

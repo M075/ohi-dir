@@ -53,10 +53,10 @@ const OrderCard = ({ order }) => {
   const StatusIcon = statusConfig[order.status]?.icon || Package;
 
   return (
-    <Link href={`/dashboard/orders/${order._id}`}>
-      <Card className="hover:shadow-md transition-shadow cursor-pointer">
+    <Link href={`/dashboard/orders/${order._id}`} className="block">
+      <Card className="hover:shadow-md transition-shadow cursor-pointer bg-zinc-100 dark:bg-zinc-800/90">
         <CardContent className="p-6">
-          <div className="flex items-start justify-between mb-4">
+          <div className="flex items-start justify-between gap-4 mb-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <h3 className="font-semibold">Order #{order.orderNumber}</h3>
@@ -79,50 +79,52 @@ const OrderCard = ({ order }) => {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Customer:</span>
-              <span className="font-medium">{order.buyer?.storename || 'N/A'}</span>
-            </div>
-
-            {order.trackingNumber && (
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-2">
               <div className="flex items-center gap-2 text-sm">
-                <Truck className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Tracking:</span>
-                <span className="font-mono text-xs">{order.trackingNumber}</span>
+                <span className="text-muted-foreground">Customer:</span>
+                <span className="font-medium">{order.buyer?.storename || 'N/A'}</span>
               </div>
-            )}
-            
-            {order.shippingAddress && (
-              <div className="flex items-start gap-2 text-sm">
-                <span className="text-muted-foreground">Ship to:</span>
-                <span className="font-medium">
-                  {order.shippingAddress.city}, {order.shippingAddress.province}
-                </span>
-              </div>
-            )}
-          </div>
 
-          {order.items.length > 0 && (
-            <div className="mt-4 flex gap-2">
-              {order.items.slice(0, 3).map((item, idx) => (
-                <div key={idx} className="w-12 h-12 rounded border overflow-hidden bg-gray-100">
-                  <Image
-                    src={item.product?.images?.[0] || item.productSnapshot?.image || '/image.png'}
-                    alt={item.productSnapshot?.title || 'Product'}
-                    width={48}
-                    height={48}
-                    className="object-cover w-full h-full"
-                  />
+              {order.trackingNumber && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Truck className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-muted-foreground">Tracking:</span>
+                  <span className="font-mono text-xs">{order.trackingNumber}</span>
                 </div>
-              ))}
-              {order.items.length > 3 && (
-                <div className="w-12 h-12 rounded border flex items-center justify-center bg-gray-100 text-xs font-medium">
-                  +{order.items.length - 3}
+              )}
+
+              {order.shippingAddress && (
+                <div className="flex items-start gap-2 text-sm">
+                  <span className="text-muted-foreground">Ship to:</span>
+                  <span className="font-medium">
+                    {order.shippingAddress.city}, {order.shippingAddress.province}
+                  </span>
                 </div>
               )}
             </div>
-          )}
+
+            {order.items.length > 0 && (
+              <div className="flex justify-end gap-2 shrink-0">
+                {order.items.slice(0, 3).map((item, idx) => (
+                  <div key={idx} className="w-12 h-12 rounded border overflow-hidden bg-gray-100">
+                    <Image
+                      src={item.product?.images?.[0] || item.productSnapshot?.image || '/image.png'}
+                      alt={item.productSnapshot?.title || 'Product'}
+                      width={48}
+                      height={48}
+                      className="object-cover w-full h-full"
+                    />
+                  </div>
+                ))}
+                {order.items.length > 3 && (
+                  <div className="w-12 h-12 rounded border flex items-center justify-center bg-gray-100 text-xs font-medium">
+                    +{order.items.length - 3}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </Link>
@@ -183,44 +185,40 @@ export default function OrdersClient() {
           <StatsCard title="Completed" value={stats.completed} icon={CheckCircle2} color="purple" />
         </div>
 
-        {/* Filters */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Order List</CardTitle>
-              <Select value={filter} onValueChange={setFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Orders</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="confirmed">Confirmed</SelectItem>
-                  <SelectItem value="processing">Processing</SelectItem>
-                  <SelectItem value="shipped">Shipped</SelectItem>
-                  <SelectItem value="delivered">Delivered</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="text-center py-8">Loading orders...</div>
-            ) : orders.length === 0 ? (
-              <div className="text-center py-12">
-                <Package className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                <p className="text-muted-foreground mb-4">No orders found</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {orders.map((order) => (
-                  <OrderCard key={order._id} order={order} />
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* Filter row */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Order List</h2>
+          <Select value={filter} onValueChange={setFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Orders</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="confirmed">Confirmed</SelectItem>
+              <SelectItem value="processing">Processing</SelectItem>
+              <SelectItem value="shipped">Shipped</SelectItem>
+              <SelectItem value="delivered">Delivered</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Orders — one card per order */}
+        {loading ? (
+          <div className="text-center py-8">Loading orders...</div>
+        ) : orders.length === 0 ? (
+          <div className="text-center py-12">
+            <Package className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+            <p className="text-muted-foreground mb-4">No orders found</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {orders.map((order) => (
+              <OrderCard key={order._id} order={order} />
+            ))}
+          </div>
+        )}
       </div>
     </DashboardShell>
   );

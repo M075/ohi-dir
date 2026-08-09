@@ -313,6 +313,15 @@ const OrderSchema = new Schema(
 
     // Cancellation
     cancellationReason: String,
+
+    // Inventory
+    // Stock is reserved (decremented) at checkout. This guards against
+    // releasing it more than once — e.g. repeated PayFast ITN callbacks for a
+    // failed payment, or a failed-payment cancel followed by a manual cancel.
+    stockRestored: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

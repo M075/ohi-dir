@@ -41,29 +41,24 @@ export async function GET(request) {
       summaryMap[item._id] = { total: item.total, count: item.count };
     });
 
+    // Consolidated shipping income allocated to admin. Sums the current
+    // 'shipping_income' account plus the legacy per-courier accounts so
+    // historical rows still count.
+    const SHIPPING_ACCOUNTS = ['shipping_income', 'shipping_courier_guy', 'shipping_pudo', 'shipping_collection'];
+    const totalShipping = SHIPPING_ACCOUNTS.reduce((sum, acc) => sum + (summaryMap[acc]?.total || 0), 0);
+    const shippingCount = SHIPPING_ACCOUNTS.reduce((sum, acc) => sum + (summaryMap[acc]?.count || 0), 0);
+
     const summary = {
       totalCommission: summaryMap['platform_commission']?.total || 0,
       totalSellerEarnings: summaryMap['seller_earnings']?.total || 0,
-      totalShippingCourierGuy: summaryMap['shipping_courier_guy']?.total || 0,
-      totalShippingPudo: summaryMap['shipping_pudo']?.total || 0,
-      totalShippingCollection: summaryMap['shipping_collection']?.total || 0,
+      totalShipping,
       totalTax: summaryMap['tax_collected']?.total || 0,
       totalBuyerPayments: summaryMap['buyer_payment']?.total || 0,
     };
 
     const shippingBreakdown = {
-      courierGuy: {
-        count: summaryMap['shipping_courier_guy']?.count || 0,
-        total: summaryMap['shipping_courier_guy']?.total || 0,
-      },
-      pudo: {
-        count: summaryMap['shipping_pudo']?.count || 0,
-        total: summaryMap['shipping_pudo']?.total || 0,
-      },
-      collection: {
-        count: summaryMap['shipping_collection']?.count || 0,
-        total: summaryMap['shipping_collection']?.total || 0,
-      },
+      total: totalShipping,
+      count: shippingCount,
     };
 
     // Recent ledger entries (last 50)

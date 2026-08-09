@@ -22,9 +22,12 @@ const LedgerEntrySchema = new Schema(
       enum: [
         'platform_commission',   // Admin's commission revenue
         'seller_earnings',       // Seller's net earnings after commission
-        'shipping_courier_guy',  // Shipping via Courier Guy (door-to-door)
-        'shipping_pudo',         // Shipping via PUDO (locker-to-locker)
-        'shipping_collection',   // Collection (no courier cost)
+        'shipping_income',       // Shipping paid by buyer, allocated to admin
+        // Legacy per-courier shipping accounts (kept so historical rows still
+        // read/aggregate; new entries use the consolidated 'shipping_income').
+        'shipping_courier_guy',
+        'shipping_pudo',
+        'shipping_collection',
         'tax_collected',         // Tax portion (VAT)
         'buyer_payment',         // Total buyer payment (debit side)
       ],

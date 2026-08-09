@@ -487,14 +487,11 @@ export async function POST(request) {
           }
         }
 
-        // Clear cart after all orders are successfully created
-        await Cart.findByIdAndUpdate(
-          cart._id, 
-          { items: [] },
-          { session: mongoSession }
-        );
-
-        console.log('✅ Cart cleared');
+        // NOTE: the cart is intentionally NOT cleared here. Orders are created
+        // as paymentStatus 'pending' and the buyer is redirected to PayFast to
+        // pay. The cart is only cleared once payment is confirmed 'paid' (in the
+        // PayFast ITN handler / return-URL verify), so an abandoned or failed
+        // payment leaves the cart intact for the buyer to retry.
       });
 
       await mongoSession.endSession();

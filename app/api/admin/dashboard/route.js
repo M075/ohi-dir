@@ -80,6 +80,13 @@ export async function GET(request) {
       ledgerMap[item._id] = { total: item.total, count: item.count };
     });
 
+    // Consolidated shipping income allocated to admin. Sums the current
+    // 'shipping_income' account plus the legacy per-courier accounts so
+    // historical rows still count.
+    const SHIPPING_ACCOUNTS = ['shipping_income', 'shipping_courier_guy', 'shipping_pudo', 'shipping_collection'];
+    const shippingTotal = SHIPPING_ACCOUNTS.reduce((sum, acc) => sum + (ledgerMap[acc]?.total || 0), 0);
+    const shippingCount = SHIPPING_ACCOUNTS.reduce((sum, acc) => sum + (ledgerMap[acc]?.count || 0), 0);
+
     const stats = {
       totalUsers,
       totalSellers: activeStores,
@@ -92,19 +99,14 @@ export async function GET(request) {
       // Ledger-derived stats
       platformCommission: ledgerMap['platform_commission']?.total || 0,
       sellerEarnings: ledgerMap['seller_earnings']?.total || 0,
+      shippingIncome: shippingTotal,
       taxCollected: ledgerMap['tax_collected']?.total || 0,
     };
 
-    // Shipping breakdown by provider
+    // Single consolidated shipping figure (allocated to admin)
     const shippingBreakdown = {
-      courierGuy: {
-        count: ledgerMap['shipping_courier_guy']?.count || 0,
-        total: ledgerMap['shipping_courier_guy']?.total || 0,
-      },
-      pudo: {
-        count: ledgerMap['shipping_pudo']?.count || 0,
-        total: ledgerMap['shipping_pudo']?.total || 0,
-      },
+      total: shippingTotal,
+      count: shippingCount,
     };
 
     return new Response(

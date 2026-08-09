@@ -38,12 +38,15 @@ export function calculatePlatformFee(amount, feePercentage) {
 }
 
 /**
- * Record ledger entries for a paid order — 3-way split:
- *  1. buyer_payment   (debit)  — the total the buyer paid
- *  2. platform_commission (credit) — admin's commission on subtotal
- *  3. seller_earnings  (credit) — subtotal minus commission minus shipping
- *  4. shipping_*       (credit) — shipping amount, tagged by courier type
- *  5. tax_collected    (credit) — tax portion (if any)
+ * Record ledger entries for a paid order. The buyer's payment is split so that
+ * every account credited sums back to the total the buyer paid:
+ *  1. buyer_payment       (debit)  — the total the buyer paid (subtotal + shipping + tax)
+ *  2. platform_commission (credit) — admin's commission on the subtotal
+ *  3. seller_earnings     (credit) — subtotal minus commission (the seller's cut)
+ *  4. shipping_income     (credit) — shipping the buyer paid, allocated to admin
+ *  5. tax_collected       (credit) — tax portion (if any)
+ *
+ * commission + seller_earnings + shipping_income + tax === buyer_payment.
  */
 export async function recordLedgerEntries(order, commissionPercentage) {
   const LedgerEntry = (await import('@/models/LedgerEntry')).default;
@@ -56,17 +59,15 @@ export async function recordLedgerEntries(order, commissionPercentage) {
 
   const commission = calculatePlatformFee(order.subtotal, commissionPercentage);
   const shippingAmount = order.shipping || 0;
-  const sellerEarnings = order.subtotal - commission - shippingAmount;
+  // Shipping is a separate line the buyer pays on top of the subtotal and is
+  // allocated to admin, so it is NOT deducted from the seller's earnings.
+  const sellerEarnings = order.subtotal - commission;
 
   const taxAmount = order.tax || 0;
 
-  // Determine shipping account based on fulfillment option
-  let shippingAccount = 'shipping_collection';
-  if (order.fulfillmentOption === 'door-to-door') {
-    shippingAccount = 'shipping_courier_guy';
-  } else if (order.fulfillmentOption === 'pudo') {
-    shippingAccount = 'shipping_pudo';
-  }
+  // Shipping the buyer paid is allocated to admin, in a single consolidated
+  // account regardless of courier type.
+  const shippingAccount = 'shipping_income';
 
   const entries = [
     // 1. Buyer payment — debit (money coming in)
@@ -103,11 +104,11 @@ export async function recordLedgerEntries(order, commissionPercentage) {
       seller: order.seller,
       buyer: order.buyer,
       description: `Seller earnings for order ${order.orderNumber}`,
-      metadata: { commissionPercentage, grossAmount: order.subtotal, commission, shippingDeducted: shippingAmount },
+      metadata: { commissionPercentage, grossAmount: order.subtotal, commission },
     },
   ];
 
-  // 4. Shipping cost — credit (only if > 0)
+  // 4. Shipping income — credit to admin (only if > 0)
   if (shippingAmount > 0) {
     entries.push({
       order: order._id,
@@ -117,7 +118,7 @@ export async function recordLedgerEntries(order, commissionPercentage) {
       amount: shippingAmount,
       seller: order.seller,
       buyer: order.buyer,
-      description: `Shipping cost (${order.fulfillmentOption}) for order ${order.orderNumber}`,
+      description: `Shipping income (${order.fulfillmentOption}) for order ${order.orderNumber}`,
       metadata: {
         fulfillmentOption: order.fulfillmentOption,
         courierProvider: order.courierProvider || null,
@@ -152,19 +153,23 @@ export async function processOrderPayment(order, commissionPercentage) {
     ? commissionPercentage
     : await getCommissionPercentage();
   const platformFee = calculatePlatformFee(order.subtotal, pct);
-  const shippingCost = order.shipping || 0;
-  // Total deductions = commission + shipping so seller net = subtotal - commission - shipping
-  const totalDeductions = platformFee + shippingCost;
-  
+  // The seller is paid on their goods only: net = subtotal - commission.
+  // Shipping and tax are the buyer paying admin on top, so they are not part
+  // of the seller's wallet transaction.
   await wallet.addTransaction({
     type: 'sale',
-    amount: order.total,
-    fee: totalDeductions,
+    amount: order.subtotal,
+    fee: platformFee,
     status: 'pending', // Pending until order delivered
     description: `Order Sale - ${order.orderNumber}`,
     order: order._id,
     buyer: order.buyer,
     paymentMethod: order.paymentMethod,
+    metadata: {
+      orderNumber: order.orderNumber,
+      commissionPercentage: pct,
+      commissionAmount: platformFee,
+    },
   });
   
   return wallet;

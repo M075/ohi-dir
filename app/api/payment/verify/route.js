@@ -1,8 +1,9 @@
 // app/api/payment/verify/route.js
 import connectDB from '@/config/database';
 import Order from '@/models/Order';
-import { getOrCreateWallet, calculatePlatformFee } from '@/utils/walletHelper';
+import { getOrCreateWallet, calculatePlatformFee, getCommissionPercentage, recordLedgerEntries } from '@/utils/walletHelper';
 import { createShiplogicShipmentFromOrder } from '@/utils/courierServices';
+import { clearPurchasedItemsFromCart } from '@/utils/cartHelpers';
 
 export async function POST(request) {
   try {
@@ -45,8 +46,22 @@ export async function POST(request) {
     const pendingOrders = orders.filter(o => o.paymentStatus === 'pending');
     if (pendingOrders.length > 0) {
       console.log(`Found ${pendingOrders.length} pending order(s), marking as paid`);
-      
+
+      // Collect purchased products per buyer so we can clear their cart only
+      // after payment is confirmed here.
+      const purchasedByBuyer = new Map();
+
       for (const order of pendingOrders) {
+        const buyerKey = order.buyer?.toString();
+        if (buyerKey) {
+          const productIds = purchasedByBuyer.get(buyerKey) || new Set();
+          for (const item of order.items) {
+            const productId = item.product?.toString();
+            if (productId) productIds.add(productId);
+          }
+          purchasedByBuyer.set(buyerKey, productIds);
+        }
+
         order.paymentStatus = 'paid';
         order.paymentDetails = {
           ...order.paymentDetails,
@@ -67,8 +82,11 @@ export async function POST(request) {
           t => t.order?.toString() === order._id.toString() && t.type === 'sale'
         );
 
+        const commissionPct = await getCommissionPercentage();
+
         if (!existingSaleTx) {
-          const platformFee = calculatePlatformFee(order.subtotal);
+          const platformFee = calculatePlatformFee(order.subtotal, commissionPct);
+          // Seller is paid on their goods only: net = subtotal - commission.
           await wallet.addTransaction({
             type: 'sale',
             amount: order.subtotal,
@@ -80,10 +98,18 @@ export async function POST(request) {
             paymentMethod: order.paymentMethod,
             metadata: {
               orderNumber: order.orderNumber,
+              commissionPercentage: commissionPct,
+              commissionAmount: platformFee,
+              shippingToAdmin: order.shipping || 0,
               source: 'payment-verify-fallback',
             },
           });
         }
+
+        // Record the ledger split here too, so the return-URL path (used when
+        // the ITN doesn't reach us, e.g. sandbox/localhost) still books the
+        // commission / seller / shipping-to-admin / tax breakdown. Idempotent.
+        await recordLedgerEntries(order, commissionPct);
 
         await order.save();
 
@@ -123,6 +149,12 @@ export async function POST(request) {
         } else if (order.fulfillmentOption === 'collection' || order.fulfillmentOption === 'pudo') {
           console.log(`ℹ️ Order ${order.orderNumber} uses ${order.fulfillmentOption} fulfillment - skipping Shiplogic shipment creation`);
         }
+      }
+
+      // Payment is confirmed here, so clear the purchased items from each
+      // buyer's cart. Idempotent with the ITN handler if both run.
+      for (const [buyerId, productIdSet] of purchasedByBuyer) {
+        await clearPurchasedItemsFromCart(buyerId, [...productIdSet]);
       }
     }
 

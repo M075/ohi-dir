@@ -25,7 +25,6 @@ import {
   Truck,
   Percent,
   Box,
-  Lock,
 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
@@ -90,8 +89,8 @@ export default function AdminDashboardClient() {
   const [recentUsers, setRecentUsers] = useState([]);
   const [flaggedProducts, setFlaggedProducts] = useState([]);
   const [shippingBreakdown, setShippingBreakdown] = useState({
-    courierGuy: { count: 0, total: 0 },
-    pudo: { count: 0, total: 0 },
+    total: 0,
+    count: 0,
   });
 
   useEffect(() => {
@@ -225,85 +224,46 @@ export default function AdminDashboardClient() {
           />
         </div>
 
-        {/* Shipping Costs Section */}
+        {/* Shipping Income Section (allocated to admin) */}
         <div>
           <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
             <Truck className="h-5 w-5 text-muted-foreground" />
-            Shipping Costs
+            Shipping Income
           </h2>
-          <div className="grid gap-4 md:grid-cols-2">
-            {/* Courier Guy (Door to Door) */}
-            <Card className="border-0 shadow-sm overflow-hidden">
-              <div className="h-1 bg-blue-500" />
-              <CardHeader className="flex flex-row items-start justify-between pb-2">
-                <div className="space-y-1">
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <Truck className="h-5 w-5 text-blue-600" />
-                    Courier Guy
-                  </CardTitle>
-                  <CardDescription>Door to Door Deliveries</CardDescription>
-                </div>
-                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                  <Box className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                  {formatCurrency(shippingBreakdown.courierGuy.total)}
-                </div>
+          <Card className="border-0 shadow-sm overflow-hidden">
+            <div className="h-1 bg-blue-500" />
+            <CardHeader className="flex flex-row items-start justify-between pb-2">
+              <div className="space-y-1">
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <Truck className="h-5 w-5 text-blue-600" />
+                  Shipping
+                </CardTitle>
+                <CardDescription>Shipping collected from buyers, allocated to admin</CardDescription>
+              </div>
+              <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                <Box className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                {formatCurrency(shippingBreakdown.total)}
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Total Shipments</span>
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
+                  {shippingBreakdown.count} shipments
+                </Badge>
+              </div>
+              {shippingBreakdown.count > 0 && (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Total Shipments</span>
-                  <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300">
-                    {shippingBreakdown.courierGuy.count} shipments
-                  </Badge>
+                  <span className="text-muted-foreground">Avg per Shipment</span>
+                  <span className="font-medium">
+                    {formatCurrency(shippingBreakdown.total / shippingBreakdown.count)}
+                  </span>
                 </div>
-                {shippingBreakdown.courierGuy.count > 0 && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Avg per Shipment</span>
-                    <span className="font-medium">
-                      {formatCurrency(shippingBreakdown.courierGuy.total / shippingBreakdown.courierGuy.count)}
-                    </span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* PUDO (Locker to Locker) */}
-            <Card className="border-0 shadow-sm overflow-hidden">
-              <div className="h-1 bg-purple-500" />
-              <CardHeader className="flex flex-row items-start justify-between pb-2">
-                <div className="space-y-1">
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <Lock className="h-5 w-5 text-purple-600" />
-                    PUDO
-                  </CardTitle>
-                  <CardDescription>Locker to Locker Deliveries</CardDescription>
-                </div>
-                <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                  <Box className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                  {formatCurrency(shippingBreakdown.pudo.total)}
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Total Shipments</span>
-                  <Badge variant="secondary" className="bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300">
-                    {shippingBreakdown.pudo.count} shipments
-                  </Badge>
-                </div>
-                {shippingBreakdown.pudo.count > 0 && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Avg per Shipment</span>
-                    <span className="font-medium">
-                      {formatCurrency(shippingBreakdown.pudo.total / shippingBreakdown.pudo.count)}
-                    </span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Main Content Tabs */}

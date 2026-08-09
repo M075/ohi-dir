@@ -1,6 +1,7 @@
 // app/api/payment/payfast/notify/route.js
 import connectDB from '@/config/database';
 import Order from '@/models/Order';
+import Product from '@/models/Product';
 import { 
   verifyPayFastPayment, 
   isValidPayFastIP, 
@@ -10,6 +11,7 @@ import {
 } from '@/utils/payfast';
 import { getOrCreateWallet, calculatePlatformFee, getCommissionPercentage, recordLedgerEntries } from '@/utils/walletHelper';
 import { createShiplogicShipmentFromOrder } from '@/utils/courierServices';
+import { clearPurchasedItemsFromCart } from '@/utils/cartHelpers';
 
 /**
  * PayFast Instant Transaction Notification (ITN) handler
@@ -113,6 +115,10 @@ export async function POST(request) {
     // Update each order and wallet
     const newPaymentStatus = parsePayFastStatus(payment_status);
 
+    // Collect purchased products per buyer so we can clear their cart only once
+    // payment is confirmed 'paid'.
+    const purchasedByBuyer = new Map();
+
     for (const order of orders) {
       order.paymentStatus = newPaymentStatus;
       order.paymentDetails = {
@@ -130,6 +136,18 @@ export async function POST(request) {
           note: 'Payment received',
         });
 
+        // Remember which products to remove from this buyer's cart (cleared
+        // below, only after payment is confirmed).
+        const buyerKey = order.buyer?.toString();
+        if (buyerKey) {
+          const productIds = purchasedByBuyer.get(buyerKey) || new Set();
+          for (const item of order.items) {
+            const productId = item.product?.toString();
+            if (productId) productIds.add(productId);
+          }
+          purchasedByBuyer.set(buyerKey, productIds);
+        }
+
         // Create a pending wallet transaction for the seller (idempotent per order)
         const wallet = await getOrCreateWallet(order.seller);
         const existingSaleTx = wallet.transactions.find(
@@ -139,15 +157,14 @@ export async function POST(request) {
         if (!existingSaleTx) {
           const commissionPct = await getCommissionPercentage();
           const platformFee = calculatePlatformFee(order.subtotal, commissionPct);
-          const shippingCost = order.shipping || 0;
-          // Total deductions = commission + shipping
-          // Seller net = subtotal - commission - shipping
-          const totalDeductions = platformFee + shippingCost;
 
+          // The seller is paid on their goods only: net = subtotal - commission.
+          // Shipping (allocated to admin) and tax are recorded in the ledger,
+          // not deducted from the seller here.
           await wallet.addTransaction({
             type: 'sale',
-            amount: order.total,
-            fee: totalDeductions,
+            amount: order.subtotal,
+            fee: platformFee,
             status: 'pending',
             description: `Order Sale - ${order.orderNumber}`,
             order: order._id,
@@ -159,11 +176,12 @@ export async function POST(request) {
               payfastTransactionId: pf_payment_id,
               commissionPercentage: commissionPct,
               commissionAmount: platformFee,
-              shippingDeducted: shippingCost,
+              shippingToAdmin: order.shipping || 0,
             },
           });
 
-          // Record ledger entries for the 3-way split
+          // Record ledger entries for the full split (commission / seller /
+          // shipping-to-admin / tax).
           await recordLedgerEntries(order, commissionPct);
         }
       } else if (newPaymentStatus === 'failed') {
@@ -173,6 +191,18 @@ export async function POST(request) {
           timestamp: new Date(),
           note: 'Payment failed',
         });
+
+        // Payment failed, so release the stock that was reserved at checkout.
+        // Guarded so repeated ITN callbacks don't restore stock more than once.
+        if (!order.stockRestored) {
+          for (const item of order.items) {
+            await Product.findByIdAndUpdate(
+              item.product,
+              { $inc: { stock: item.quantity } }
+            );
+          }
+          order.stockRestored = true;
+        }
       }
 
       await order.save();
@@ -215,6 +245,13 @@ export async function POST(request) {
       }
 
       console.log('Order updated:', order.orderNumber, 'Status:', newPaymentStatus);
+    }
+
+    // Now that payment is confirmed, clear the purchased items from each
+    // buyer's cart. Only the purchased products are removed (anything added
+    // while paying is preserved), and it is idempotent across ITN retries.
+    for (const [buyerId, productIdSet] of purchasedByBuyer) {
+      await clearPurchasedItemsFromCart(buyerId, [...productIdSet]);
     }
 
     // Respond with success

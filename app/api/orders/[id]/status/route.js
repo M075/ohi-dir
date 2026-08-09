@@ -123,13 +123,17 @@ export async function PUT(request, { params }) {
       case 'cancelled':
         order.cancelledAt = new Date();
         if (notes) order.cancellationReason = notes;
-        
-        // Restore product stock if order is cancelled
-        for (const item of order.items) {
-          await Product.findByIdAndUpdate(
-            item.product,
-            { $inc: { stock: item.quantity } }
-          );
+
+        // Restore product stock if order is cancelled. Guarded so stock isn't
+        // released twice (e.g. if it was already restored on a failed payment).
+        if (!order.stockRestored) {
+          for (const item of order.items) {
+            await Product.findByIdAndUpdate(
+              item.product,
+              { $inc: { stock: item.quantity } }
+            );
+          }
+          order.stockRestored = true;
         }
         break;
     }

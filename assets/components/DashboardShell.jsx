@@ -97,12 +97,12 @@ function classNames(...classes) {
 }
 
 export default function DashboardShell({ children, breadcrumbs: breadcrumbsProp }) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const { unreadCount } = useMessages();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
 
-  // Determine user role
+  // Determine user role (use defaults while loading)
   const userRole = session?.user?.role || 'buyer';
   const isSeller = userRole === 'seller' || session?.user?.isAdmin;
   const isAdmin = session?.user?.isAdmin;
@@ -139,10 +139,10 @@ export default function DashboardShell({ children, breadcrumbs: breadcrumbsProp 
 
   // Seller navigation (full access)
   const sellerNavigation = [
-    { 
-      name: "Dashboard", 
-      href: "/dashboard", 
-      icon: HomeIcon 
+    {
+      name: "Dashboard",
+      href: "/dashboard",
+      icon: HomeIcon
     },
     {
       name: "Profile",
@@ -193,10 +193,10 @@ export default function DashboardShell({ children, breadcrumbs: breadcrumbsProp 
   ];
 
   // Select navigation based on role
-  const navigation = isAdmin 
-    ? adminNavigation 
-    : isSeller 
-    ? sellerNavigation 
+  const navigation = isAdmin
+    ? adminNavigation
+    : isSeller
+    ? sellerNavigation
     : buyerNavigation;
 
   // Determine active nav item
@@ -216,6 +216,11 @@ export default function DashboardShell({ children, breadcrumbs: breadcrumbsProp 
     }
     return best;
   }, [pathname, navigation]);
+
+  // Show skeleton while session is loading
+  if (status === 'loading') {
+    return <DashboardShellSkeleton />;
+  }
 
   return (
     <>
@@ -438,6 +443,78 @@ export default function DashboardShell({ children, breadcrumbs: breadcrumbsProp 
             <div className="px-4 sm:px-6 lg:px-8">{children}</div>
           </main>
         </div>
+      </div>
+    </>
+  );
+}
+
+// Skeleton loading component for DashboardShell
+function DashboardShellSkeleton() {
+  return (
+    <>
+      {/* Mobile sidebar skeleton */}
+      <div className="lg:hidden fixed inset-0 z-50 bg-white dark:bg-zinc-900">
+        <div className="h-16 border-b border-gray-200 dark:border-gray-800" />
+        <div className="p-6 space-y-4">
+          <div className="h-8 w-32 animate-pulse bg-zinc-200 dark:bg-zinc-700 rounded" />
+          <div className="space-y-3">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-10 w-full animate-pulse bg-zinc-200 dark:bg-zinc-700 rounded-md" />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop sidebar skeleton */}
+      <div className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-72 lg:flex-col">
+        <div className="flex grow flex-col gap-y-5 overflow-y-auto bg-zinc-100 dark:bg-zinc-900 px-6 pb-4">
+          <div className="flex h-16 shrink-0 items-center">
+            <div className="ml-4 mt-2 h-12 w-12 animate-pulse bg-zinc-200 dark:bg-zinc-700 rounded" />
+          </div>
+          <div className="px-4 py-2 animate-pulse bg-zinc-200 dark:bg-zinc-700 rounded-lg" />
+          <nav className="flex flex-1 flex-col">
+            <ul role="list" className="flex flex-1 flex-col gap-y-7">
+              <li>
+                <ul role="list" className="-mx-2 space-y-1">
+                  {[...Array(8)].map((_, i) => (
+                    <li key={i}>
+                      <div className="h-10 w-full animate-pulse bg-zinc-200 dark:bg-zinc-700 rounded-md" />
+                    </li>
+                  ))}
+                </ul>
+              </li>
+              <li className="mt-auto">
+                <div className="h-10 w-full animate-pulse bg-zinc-200 dark:bg-zinc-700 rounded-md" />
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </div>
+
+      {/* Main content area skeleton */}
+      <div className="lg:pl-72 sm:mt-20">
+        <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 dark:border-gray-800 bg-zinc-100 dark:bg-zinc-900 px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+          <div className="h-6 w-px animate-pulse bg-zinc-900/10 lg:hidden" />
+          <div className="h-8 w-64 animate-pulse bg-zinc-200 dark:bg-zinc-700 rounded-md" />
+          <div className="relative flex-1 md:flex-initial">
+            <div className="h-10 w-[200px] animate-pulse bg-zinc-200 dark:bg-zinc-700 rounded-lg" />
+          </div>
+        </div>
+
+        <main className="py-10">
+          <div className="px-4 sm:px-6 lg:px-8 space-y-6">
+            <div className="h-8 w-48 animate-pulse bg-zinc-200 dark:bg-zinc-700 rounded" />
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="space-y-4">
+                  <div className="h-10 w-full animate-pulse bg-zinc-200 dark:bg-zinc-700 rounded" />
+                  <div className="h-20 w-full animate-pulse bg-zinc-200 dark:bg-zinc-700 rounded-lg" />
+                </div>
+              ))}
+            </div>
+            <div className="h-40 w-full animate-pulse bg-zinc-200 dark:bg-zinc-700 rounded-lg" />
+          </div>
+        </main>
       </div>
     </>
   );

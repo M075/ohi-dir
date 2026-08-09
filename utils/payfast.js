@@ -82,6 +82,26 @@ const PAYFAST_FIELD_ORDER = [
 ];
 
 /**
+ * Encode a value exactly like PHP's urlencode(), which is what PayFast uses to
+ * rebuild and verify the signature on their side. JavaScript's
+ * encodeURIComponent() leaves ! ' ( ) * ~ unescaped and encodes spaces as %20,
+ * whereas PHP encodes those characters and uses '+' for spaces. If we don't
+ * match PHP, our MD5 differs from PayFast's and the payment is rejected (403 /
+ * "signature mismatch"). This bites in practice on item_description, which
+ * contains "seller(s)".
+ */
+export function pfUrlEncode(value) {
+  return encodeURIComponent(value.toString().trim())
+    .replace(/%20/g, '+')
+    .replace(/!/g, '%21')
+    .replace(/'/g, '%27')
+    .replace(/\(/g, '%28')
+    .replace(/\)/g, '%29')
+    .replace(/\*/g, '%2A')
+    .replace(/~/g, '%7E');
+}
+
+/**
  * Generate PayFast payment signature
  */
 export function generatePayFastSignature(data, passPhrase = null) {
@@ -104,16 +124,16 @@ export function generatePayFastSignature(data, passPhrase = null) {
   let pfOutput = '';
   for (const [key, value] of orderedPairs) {
     if (value !== '' && value !== null && value !== undefined) {
-      pfOutput += `${key}=${encodeURIComponent(value.toString().trim()).replace(/%20/g, '+')}&`;
+      pfOutput += `${key}=${pfUrlEncode(value)}&`;
     }
   }
 
   // Remove last ampersand (handles empty string safely)
   let getString = pfOutput.endsWith('&') ? pfOutput.slice(0, -1) : pfOutput;
-  
+
   // Add passphrase if provided
   if (passPhrase !== null && passPhrase !== '') {
-    getString += `&passphrase=${encodeURIComponent(passPhrase.trim()).replace(/%20/g, '+')}`;
+    getString += `&passphrase=${pfUrlEncode(passPhrase)}`;
   }
 
   console.log('Signature string:', getString);
