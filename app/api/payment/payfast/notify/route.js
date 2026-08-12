@@ -63,7 +63,9 @@ export async function POST(request) {
 
     if (hasSignature) {
       const useSandbox = postData.merchant_id === '10000100' || isPayFastSandbox();
-      const isValid = verifyPayFastPayment(postData, getPayFastPassphrase(useSandbox));
+      // Pass the ordered pairs, not the object — PayFast signs the ITN in the
+      // order the fields arrive.
+      const isValid = verifyPayFastPayment(rawPairs, getPayFastPassphrase(useSandbox));
 
       if (!isValid) {
         console.error('Invalid PayFast signature');

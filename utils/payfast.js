@@ -110,7 +110,71 @@ export function pfUrlEncode(value) {
 }
 
 /**
- * Generate PayFast payment signature
+ * Reorder a payment payload into PayFast's prescribed field order.
+ *
+ * This matters more than it looks. PayFast rebuilds the signature from the
+ * fields exactly as they arrive in the POST body, so the order we *sign* in
+ * and the order we *submit* in have to be identical. The browser builds its
+ * form with Object.entries(), i.e. insertion order — so the payload object
+ * itself must already be in signing order before it leaves the server.
+ * Otherwise PayFast rejects the payment with a signature error at
+ * /eng/process.
+ *
+ * Values are trimmed here too, because pfUrlEncode() trims before hashing: an
+ * untrimmed value would be signed in its trimmed form but submitted with the
+ * whitespace intact, and mismatch for that reason alone.
+ */
+export function orderPayFastFields(data) {
+  const ordered = {};
+
+  const put = (key) => {
+    const value = data[key];
+    if (value === '' || value === null || value === undefined) return;
+    ordered[key] = typeof value === 'string' ? value.trim() : value;
+  };
+
+  PAYFAST_FIELD_ORDER.forEach(key => {
+    if (Object.prototype.hasOwnProperty.call(data, key) && key !== 'signature') put(key);
+  });
+
+  // Anything not in the prescribed list keeps its relative order at the end.
+  Object.keys(data).forEach(key => {
+    if (key === 'signature' || Object.prototype.hasOwnProperty.call(ordered, key)) return;
+    put(key);
+  });
+
+  return ordered;
+}
+
+/**
+ * Generate a PayFast signature over key/value pairs in the order given.
+ *
+ * Order is the caller's responsibility because the two use sites disagree:
+ * outbound payments use PayFast's prescribed field order, while ITN
+ * verification must use the order the fields arrived in.
+ */
+export function generateSignatureFromPairs(pairs, passPhrase = null) {
+  let pfOutput = '';
+  for (const [key, value] of pairs) {
+    if (key === 'signature') continue;
+    if (value !== '' && value !== null && value !== undefined) {
+      pfOutput += `${key}=${pfUrlEncode(value)}&`;
+    }
+  }
+
+  let getString = pfOutput.endsWith('&') ? pfOutput.slice(0, -1) : pfOutput;
+
+  if (passPhrase !== null && passPhrase !== '') {
+    getString += `&passphrase=${pfUrlEncode(passPhrase)}`;
+  }
+
+  // NOTE: never log `getString` — it contains the merchant passphrase in clear
+  // text, which is enough to forge payment notifications.
+  return crypto.createHash('md5').update(getString).digest('hex');
+}
+
+/**
+ * Generate PayFast payment signature using the prescribed field order.
  */
 export function generatePayFastSignature(data, passPhrase = null) {
   // Create parameter string using the PayFast prescribed order
@@ -252,15 +316,17 @@ export function createPayFastPayment(orders, returnUrl, cancelUrl, notifyUrl) {
     data.cell_number = phone.replace(/\s/g, '');
   }
 
+  // Normalise into PayFast's prescribed order BEFORE signing, so the order we
+  // hash is the order the browser posts. See orderPayFastFields().
+  const payload = orderPayFastFields(data);
+
   if (isPayFastSignatureRequired()) {
-    data.signature = generatePayFastSignature(data, passPhrase);
-  } else {
-    delete data.signature;
+    payload.signature = generateSignatureFromPairs(Object.entries(payload), passPhrase);
   }
 
   return {
-    data,
-    url: useSandbox 
+    data: payload,
+    url: useSandbox
       ? 'https://sandbox.payfast.co.za/eng/process'
       : 'https://www.payfast.co.za/eng/process',
   };
@@ -274,11 +340,19 @@ export function verifyPayFastPayment(postData, passPhrase = null) {
     return true;
   }
 
+  // Accepts either the ordered [key, value] pairs as received, or a plain
+  // object. Prefer the pairs: PayFast builds the ITN signature from the
+  // fields in the order they appear in the POST body, NOT the prescribed
+  // order used for outbound payments. Reordering them here made every genuine
+  // notification fail verification.
+  const pairs = Array.isArray(postData) ? postData : Object.entries(postData);
+
+  const signatureEntry = pairs.find(([key]) => key === 'signature');
+  const pfSignature = signatureEntry?.[1];
+
   // Copy rather than mutate: the caller still needs the untouched payload
   // (signature included) to POST back to PayFast for server confirmation.
-  const { signature: pfSignature, ...rest } = postData;
-
-  const calculatedSignature = generatePayFastSignature(rest, passPhrase);
+  const calculatedSignature = generateSignatureFromPairs(pairs, passPhrase);
 
   return timingSafeEquals(pfSignature, calculatedSignature);
 }
