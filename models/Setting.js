@@ -13,6 +13,13 @@ const SettingSchema = new Schema(
       min: 0,
       max: 100,
     },
+    // When the abandoned-checkout sweep last ran. Used to throttle the
+    // opportunistic expiry that runs off organic traffic, since Vercel's Hobby
+    // plan only permits a once-daily cron. See utils/expirePendingOrders.js.
+    lastOrderExpirySweepAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

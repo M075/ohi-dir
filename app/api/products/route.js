@@ -4,10 +4,17 @@ import User from '@/models/User';
 import Like from '@/models/Like';
 import { getSessionUser } from '@/utils/getSessionUser';
 import { uploadMultipleToImageKit, getImagePresets } from '@/utils/imagekit';
+import { maybeExpirePendingOrders } from '@/utils/expirePendingOrders';
 
 export const GET = async (request) => {
   try {
     await connectDB();
+
+    // Piggyback the abandoned-checkout sweep on browsing traffic, so stock
+    // shown here reflects reality. Throttled to once every few minutes across
+    // all instances, and it never throws — see utils/expirePendingOrders.js.
+    await maybeExpirePendingOrders();
+
     const products = await Product.find().lean();
 
     const sessionUser = await getSessionUser();

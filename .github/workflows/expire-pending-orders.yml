@@ -1,0 +1,41 @@
+# Drives the abandoned-checkout sweep more often than Vercel's Hobby plan
+# allows.
+#
+# Hobby caps cron jobs at once per day with up to 59 minutes of jitter, which
+# is too coarse for releasing reserved stock. GitHub Actions schedules are free
+# on public repos and included in the monthly minutes on private ones.
+#
+# Setup — add two repository secrets (Settings -> Secrets and variables ->
+# Actions):
+#   APP_URL      e.g. https://your-domain.co.za   (no trailing slash)
+#   CRON_SECRET  the same value set in Vercel's environment variables
+#
+# Note: GitHub's scheduler is best-effort and can lag by several minutes under
+# load. That is fine here — the sweep only needs to run somewhat regularly, and
+# the opportunistic path in utils/expirePendingOrders.js covers the gaps
+# whenever the site has traffic.
+
+name: Expire pending orders
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # allows a manual run from the Actions tab
+
+jobs:
+  expire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call expiry endpoint
+        run: |
+          if [ -z "${{ secrets.APP_URL }}" ] || [ -z "${{ secrets.CRON_SECRET }}" ]; then
+            echo "APP_URL or CRON_SECRET secret is not set; skipping."
+            exit 0
+          fi
+
+          response=$(curl --silent --show-error --fail-with-body \
+            --max-time 60 \
+            --header "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/expire-pending-orders")
+
+          echo "$response"

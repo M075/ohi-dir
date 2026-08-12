@@ -12,6 +12,7 @@ import { createPayFastPayment } from '@/utils/payfast';
 import { CourierServiceManager, getLockerTariff } from '@/utils/courierServices';
 import { buildSellerSnapshot, buildParcelsForItem, summarizeParcels } from '@/utils/orderShippingHelpers';
 import { quoteCartShipping, resolveSelectedQuote } from '@/utils/checkoutQuotes';
+import { maybeExpirePendingOrders } from '@/utils/expirePendingOrders';
 
 // Helper function to send JSON responses
 const jsonResponse = (data, status = 200) => {
@@ -254,6 +255,12 @@ export async function POST(request) {
     }
 
     console.log('👤 Buyer:', buyer.email);
+
+    // Release stock still held by abandoned checkouts before validating this
+    // cart, so a buyer is never told an item is out of stock because someone
+    // else walked away from the PayFast page half an hour ago. Throttled, so
+    // this is usually a single no-op query.
+    await maybeExpirePendingOrders();
 
     // Get cart with populated products
     const cart = await Cart.findOne({ user: sessionUser.userId })
