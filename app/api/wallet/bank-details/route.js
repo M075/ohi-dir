@@ -4,6 +4,7 @@
 import connectDB from '@/config/database';
 import Wallet from '@/models/Wallet';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { encryptField, decryptField, maskAccountNumber } from '@/utils/fieldEncryption';
 
 // PUT - Update bank details
 export async function PUT(request) {
@@ -38,10 +39,34 @@ export async function PUT(request) {
       });
     }
 
+    // The wallet endpoint only ever returns a masked account number, so a
+    // resubmitted form may contain the mask rather than a real number. Treat
+    // that as "unchanged" instead of overwriting the stored value with dots.
+    const submittedAccount = String(accountNumber).replace(/\s/g, '');
+    const accountUnchanged = submittedAccount.includes('•');
+
+    if (!accountUnchanged && !/^\d{6,20}$/.test(submittedAccount)) {
+      return new Response(
+        JSON.stringify({ error: 'Account number must be 6 to 20 digits' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const storedAccountNumber = accountUnchanged
+      ? wallet.bankDetails?.accountNumber
+      : encryptField(submittedAccount);
+
+    if (!storedAccountNumber) {
+      return new Response(
+        JSON.stringify({ error: 'Account number is required' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     wallet.bankDetails = {
       accountHolder,
       bankName,
-      accountNumber: accountNumber.replace(/\s/g, ''), // Remove spaces
+      accountNumber: storedAccountNumber, // encrypted at rest
       branchCode: branchCode.replace(/\s/g, ''),
       accountType,
       verified: false, // Admin needs to verify
@@ -53,7 +78,14 @@ export async function PUT(request) {
       JSON.stringify({
         success: true,
         message: 'Bank details updated successfully',
-        bankDetails: wallet.bankDetails,
+        bankDetails: {
+          accountHolder: wallet.bankDetails.accountHolder,
+          bankName: wallet.bankDetails.bankName,
+          accountNumber: maskAccountNumber(decryptField(wallet.bankDetails.accountNumber)),
+          branchCode: wallet.bankDetails.branchCode,
+          accountType: wallet.bankDetails.accountType,
+          verified: wallet.bankDetails.verified,
+        },
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );

@@ -4,6 +4,7 @@
 import connectDB from '@/config/database';
 import Wallet from '@/models/Wallet';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { decryptField, maskAccountNumber } from '@/utils/fieldEncryption';
 
 // GET - Fetch wallet data
 export async function GET(request) {
@@ -44,7 +45,16 @@ export async function GET(request) {
         totalFees: wallet.totalFees,
         currency: wallet.currency,
         stats: wallet.stats,
-        bankDetails: wallet.bankDetails,
+        // Masked: the seller already knows their own account number, and the
+        // UI only needs enough to confirm which account payouts will go to.
+        bankDetails: wallet.bankDetails ? {
+          accountHolder: wallet.bankDetails.accountHolder,
+          bankName: wallet.bankDetails.bankName,
+          accountNumber: maskAccountNumber(decryptField(wallet.bankDetails.accountNumber)),
+          branchCode: wallet.bankDetails.branchCode,
+          accountType: wallet.bankDetails.accountType,
+          verified: wallet.bankDetails.verified,
+        } : null,
         payoutSettings: wallet.payoutSettings,
         transactions: recentTransactions,
       }),

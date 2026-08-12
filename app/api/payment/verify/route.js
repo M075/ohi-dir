@@ -1,187 +1,111 @@
 // app/api/payment/verify/route.js
 import connectDB from '@/config/database';
 import Order from '@/models/Order';
-import { getOrCreateWallet, calculatePlatformFee, getCommissionPercentage, recordLedgerEntries } from '@/utils/walletHelper';
-import { createShiplogicShipmentFromOrder } from '@/utils/courierServices';
-import { clearPurchasedItemsFromCart } from '@/utils/cartHelpers';
+import { getSessionUser } from '@/utils/getSessionUser';
+
+/**
+ * Order status lookup for the PayFast return URL.
+ *
+ * IMPORTANT: this endpoint is deliberately READ-ONLY.
+ *
+ * PayFast's return_url is just a browser redirect. Nothing in it is signed, so
+ * a request arriving here proves nothing about whether money actually moved —
+ * a buyer can navigate straight to /payment/success without paying at all.
+ * This route used to mark orders paid, credit the seller's wallet and book a
+ * courier shipment on the strength of that redirect, which meant anyone who
+ * knew an order number could take goods for free.
+ *
+ * The ITN handler (app/api/payment/payfast/notify) is the only writer of
+ * payment state, because it is the only path PayFast signs and confirms. Here
+ * we report what that handler has recorded so far, and the client polls until
+ * it lands.
+ */
+
+const jsonResponse = (data, status = 200) => new Response(
+  JSON.stringify(data),
+  {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+    },
+  },
+);
 
 export async function POST(request) {
   try {
     await connectDB();
-    
-    const { paymentId } = await request.json();
-    
-    if (!paymentId) {
-      return new Response(
-        JSON.stringify({ error: 'Payment ID required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+
+    const sessionUser = await getSessionUser();
+    if (!sessionUser?.userId) {
+      return jsonResponse({ error: 'Unauthorized' }, 401);
     }
 
-    console.log('Verifying payment for:', paymentId);
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return jsonResponse({ error: 'Invalid request format' }, 400);
+    }
 
-    // Payment ID can be a single order or comma-separated orders
-    const orderNumbers = paymentId.split(',').map(n => n.trim());
-    
-    // Find orders
+    const { paymentId } = body || {};
+
+    if (!paymentId || typeof paymentId !== 'string') {
+      return jsonResponse({ error: 'Payment ID required' }, 400);
+    }
+
+    // A payment can cover several orders (one per seller), passed as a
+    // comma-separated list of order numbers. Cap the count so this can't be
+    // used to sweep the collection.
+    const orderNumbers = paymentId
+      .split(',')
+      .map(n => n.trim())
+      .filter(Boolean)
+      .slice(0, 20);
+
+    if (!orderNumbers.length) {
+      return jsonResponse({ error: 'Payment ID required' }, 400);
+    }
+
+    // Scope the query to the signed-in buyer. An order number belonging to
+    // someone else simply doesn't exist as far as this endpoint is concerned.
     const orders = await Order.find({
-      orderNumber: { $in: orderNumbers }
+      orderNumber: { $in: orderNumbers },
+      buyer: sessionUser.userId,
+    }).select('orderNumber status paymentStatus total createdAt');
+
+    if (!orders.length) {
+      return jsonResponse({ error: 'Orders not found' }, 404);
+    }
+
+    const allPaid = orders.every(o => o.paymentStatus === 'paid');
+    const anyFailed = orders.some(o => o.paymentStatus === 'failed');
+    const totalAmount = orders.reduce((sum, order) => sum + (order.total || 0), 0);
+
+    // Tell the client whether waiting longer could still change the answer.
+    // PayFast normally delivers the ITN within seconds, but it retries over a
+    // longer window, so 'pending' is not yet a failure.
+    let paymentState = 'pending';
+    if (allPaid) paymentState = 'paid';
+    else if (anyFailed) paymentState = 'failed';
+
+    return jsonResponse({
+      success: true,
+      paymentState,
+      pending: paymentState === 'pending',
+      orderNumbers: orders.map(o => o.orderNumber).join(', '),
+      amount: totalAmount.toFixed(2),
+      orders: orders.map(o => ({
+        _id: o._id,
+        orderNumber: o.orderNumber,
+        status: o.status,
+        paymentStatus: o.paymentStatus,
+        total: o.total,
+      })),
     });
 
-    if (orders.length === 0) {
-      console.error('Orders not found:', orderNumbers);
-      return new Response(
-        JSON.stringify({ error: 'Orders not found' }),
-        { status: 404, headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log(`Found ${orders.length} order(s)`);
-
-    // Calculate total amount
-    const totalAmount = orders.reduce((sum, order) => sum + order.total, 0);
-
-    // Check if payment status needs to be updated
-    // (ITN handler should have already updated it, but this is a fallback)
-    const pendingOrders = orders.filter(o => o.paymentStatus === 'pending');
-    if (pendingOrders.length > 0) {
-      console.log(`Found ${pendingOrders.length} pending order(s), marking as paid`);
-
-      // Collect purchased products per buyer so we can clear their cart only
-      // after payment is confirmed here.
-      const purchasedByBuyer = new Map();
-
-      for (const order of pendingOrders) {
-        const buyerKey = order.buyer?.toString();
-        if (buyerKey) {
-          const productIds = purchasedByBuyer.get(buyerKey) || new Set();
-          for (const item of order.items) {
-            const productId = item.product?.toString();
-            if (productId) productIds.add(productId);
-          }
-          purchasedByBuyer.set(buyerKey, productIds);
-        }
-
-        order.paymentStatus = 'paid';
-        order.paymentDetails = {
-          ...order.paymentDetails,
-          paidAt: new Date(),
-        };
-        // Align with ITN handler: move to processing and create wallet txn if missing
-        order.status = 'processing';
-        order.confirmedAt = new Date();
-        order.statusHistory.push({
-          status: 'processing',
-          timestamp: new Date(),
-          note: 'Payment confirmed via return URL',
-        });
-
-        // Ensure seller wallet has the pending sale transaction
-        const wallet = await getOrCreateWallet(order.seller);
-        const existingSaleTx = wallet.transactions.find(
-          t => t.order?.toString() === order._id.toString() && t.type === 'sale'
-        );
-
-        const commissionPct = await getCommissionPercentage();
-
-        if (!existingSaleTx) {
-          const platformFee = calculatePlatformFee(order.subtotal, commissionPct);
-          // Seller is paid on their goods only: net = subtotal - commission.
-          await wallet.addTransaction({
-            type: 'sale',
-            amount: order.subtotal,
-            fee: platformFee,
-            status: 'pending',
-            description: `Order Sale - ${order.orderNumber}`,
-            order: order._id,
-            buyer: order.buyer,
-            paymentMethod: order.paymentMethod,
-            metadata: {
-              orderNumber: order.orderNumber,
-              commissionPercentage: commissionPct,
-              commissionAmount: platformFee,
-              shippingToAdmin: order.shipping || 0,
-              source: 'payment-verify-fallback',
-            },
-          });
-        }
-
-        // Record the ledger split here too, so the return-URL path (used when
-        // the ITN doesn't reach us, e.g. sandbox/localhost) still books the
-        // commission / seller / shipping-to-admin / tax breakdown. Idempotent.
-        await recordLedgerEntries(order, commissionPct);
-
-        await order.save();
-
-        // Create shipment on Shiplogic for door-to-door deliveries
-        if (order.fulfillmentOption === 'door-to-door' && !order.courierReference) {
-          try {
-            console.log(`📦 Creating shipment on Shiplogic for order: ${order.orderNumber}`);
-            
-            const shipmentResult = await createShiplogicShipmentFromOrder(order);
-            
-            if (shipmentResult && shipmentResult.shipmentId) {
-              order.courierProvider = 'courier-guy';
-              order.courierReference = shipmentResult.shipmentId;
-              order.trackingNumber = shipmentResult.trackingReference;
-              order.status = 'shipped'; // Mark as shipped once shipment is created
-              order.shippedAt = new Date();
-              order.statusHistory.push({
-                status: 'shipped',
-                timestamp: new Date(),
-                note: `Shipment created on Shiplogic - Reference: ${shipmentResult.shipmentId}`,
-              });
-              
-              console.log(`✅ Shipment created successfully for ${order.orderNumber}:`, {
-                shipmentId: shipmentResult.shipmentId,
-                trackingNumber: shipmentResult.trackingReference,
-                labelUrl: shipmentResult.labelUrl,
-              });
-
-              await order.save();
-            }
-          } catch (shipmentError) {
-            console.error(`⚠️ Failed to create shipment for order ${order.orderNumber}:`, shipmentError.message);
-            // Don't fail payment verification if shipment creation fails
-            // The order has been marked as paid and processing, which is the important part
-            // Shipment can be retried manually or via a background job
-          }
-        } else if (order.fulfillmentOption === 'collection' || order.fulfillmentOption === 'pudo') {
-          console.log(`ℹ️ Order ${order.orderNumber} uses ${order.fulfillmentOption} fulfillment - skipping Shiplogic shipment creation`);
-        }
-      }
-
-      // Payment is confirmed here, so clear the purchased items from each
-      // buyer's cart. Idempotent with the ITN handler if both run.
-      for (const [buyerId, productIdSet] of purchasedByBuyer) {
-        await clearPurchasedItemsFromCart(buyerId, [...productIdSet]);
-      }
-    }
-
-    return new Response(
-      JSON.stringify({
-        success: true,
-        orderNumbers: orders.map(o => o.orderNumber).join(', '),
-        amount: totalAmount.toFixed(2),
-        orders: orders.map(o => ({
-          _id: o._id,
-          orderNumber: o.orderNumber,
-          status: o.status,
-          paymentStatus: o.paymentStatus,
-          total: o.total,
-        })),
-      }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
-    );
-
   } catch (error) {
-    console.error('Payment verification error:', error);
-    return new Response(
-      JSON.stringify({ 
-        error: 'Verification failed',
-        details: process.env.NODE_ENV === 'development' ? error.message : undefined
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    console.error('Payment status lookup error:', error);
+    return jsonResponse({ error: 'Failed to load order status' }, 500);
   }
 }

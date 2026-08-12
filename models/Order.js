@@ -1,5 +1,6 @@
 // models/Order.js - FIXED VERSION
 import mongoose from 'mongoose';
+import { randomBytes } from 'crypto';
 const { Schema, model, models } = mongoose;
 
 const OrderItemSchema = new Schema({
@@ -270,6 +271,10 @@ const OrderSchema = new Schema(
       payfastTransactionId: String,
       paidAt: Date,
       manuallyMarkedBy: Schema.Types.ObjectId,
+      // PayFast ITN ids already applied to this order. PayFast retries
+      // notifications, so each one is claimed exactly once — see the notify
+      // route's replay guard.
+      processedItnIds: [String],
     },
 
     // Order Status
@@ -329,7 +334,7 @@ const OrderSchema = new Schema(
 );
 
 // Generate unique order number BEFORE validation
-OrderSchema.pre('validate', async function () {
+OrderSchema.pre('validate', function () {
   // Only generate if this is a new order and orderNumber is not set
   if (this.isNew && !this.orderNumber) {
     const date = new Date();
@@ -337,32 +342,19 @@ OrderSchema.pre('validate', async function () {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
 
-    // Try up to 10 times to generate a unique order number
-    let attempts = 0;
-    let orderNumber = null;
+    // Crypto-random, not Math.random: the previous 4-digit suffix gave only
+    // 10,000 order numbers per day, which is trivially enumerable. Ten base32
+    // characters is ~50 bits, so guessing is not a viable attack and the
+    // read-then-write uniqueness loop (which could collide under concurrent
+    // checkouts anyway) is no longer needed — the unique index is enough.
+    const suffix = randomBytes(7)
+      .toString('base64')
+      .replace(/[^A-Z0-9]/gi, '')
+      .toUpperCase()
+      .slice(0, 10)
+      .padEnd(10, '0');
 
-    while (attempts < 10) {
-      const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-      orderNumber = `ORD-${year}${month}${day}-${random}`;
-
-      // Check if this order number already exists
-      const existing = await mongoose.models.Order.findOne({ orderNumber });
-
-      if (!existing) {
-        this.orderNumber = orderNumber;
-        console.log(`✅ Generated order number: ${orderNumber}`);
-        break;
-      }
-
-      attempts++;
-    }
-
-    if (!this.orderNumber) {
-      // Fallback: use MongoDB ObjectId as part of the order number
-      const objectIdPart = this._id.toString().slice(-8);
-      this.orderNumber = `ORD-${year}${month}${day}-${objectIdPart}`;
-      console.log(`⚠️ Used fallback order number: ${this.orderNumber}`);
-    }
+    this.orderNumber = `ORD-${year}${month}${day}-${suffix}`;
   }
 });
 

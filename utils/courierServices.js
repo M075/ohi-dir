@@ -46,6 +46,27 @@ const LOCKER_SIZES = {
 };
 
 /**
+ * Server-side tariff lookup for a PUDO locker size.
+ *
+ * Checkout must price locker deliveries from this table rather than from a
+ * price posted by the browser — otherwise a buyer can name their own shipping
+ * cost while we still pay PUDO the real rate.
+ *
+ * @param {string} lockerSize - Size key: 'XS', 'S', 'M', 'L'
+ * @returns {{size: string, price: number, service_level_code: string, name: string}}
+ */
+export const getLockerTariff = (lockerSize = 'M') => {
+  const size = String(lockerSize || 'M').toUpperCase();
+  const locker = LOCKER_SIZES[size] || LOCKER_SIZES.M;
+  return {
+    size: LOCKER_SIZES[size] ? size : 'M',
+    price: locker.price,
+    service_level_code: locker.service_level_code,
+    name: locker.name,
+  };
+};
+
+/**
  * Format parcels for PUDO locker delivery
  * @param {string} lockerSize - Size key: 'XS', 'S', 'M', 'L'
  * @returns {Array} Array with single locker parcel formatted for Shiplogic

@@ -5,6 +5,21 @@ import connectDB from '@/config/database';
 import Payout from '@/models/Payout';
 import User from '@/models/User';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { decryptField } from '@/utils/fieldEncryption';
+
+/**
+ * Escape a value for CSV.
+ *
+ * Quotes any cell containing a delimiter, quote or newline, and prefixes cells
+ * that begin with =, +, - or @ with a single quote so a store name like
+ * `=HYPERLINK(...)` is shown as text rather than executed as a formula when
+ * the export is opened in Excel.
+ */
+const csvCell = (value) => {
+  const str = value === null || value === undefined ? '' : String(value);
+  const guarded = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+  return /[",\n\r]/.test(guarded) ? `"${guarded.replace(/"/g, '""')}"` : guarded;
+};
 
 // GET - Export payouts as CSV
 export async function GET(request) {
@@ -44,6 +59,7 @@ export async function GET(request) {
 
     // Generate CSV
     const csvHeader = 'Reference,Seller,Email,Amount,Status,Requested,Processed,Completed,Bank,Account,Branch Code\n';
+
     
     const csvRows = payouts.map(payout => {
       return [
@@ -56,9 +72,11 @@ export async function GET(request) {
         payout.processedAt?.toISOString() || '',
         payout.completedAt?.toISOString() || '',
         payout.bankDetails.bankName || '',
-        payout.bankDetails.accountNumber || '',
+        // The bank file needs the real number — this export is the one place
+        // it is legitimately decrypted, and the route is admin-only.
+        decryptField(payout.bankDetails.accountNumber) || '',
         payout.bankDetails.branchCode || '',
-      ].join(',');
+      ].map(csvCell).join(',');
     }).join('\n');
 
     const csv = csvHeader + csvRows;

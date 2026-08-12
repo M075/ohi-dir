@@ -1,6 +1,7 @@
-// app/api/stores/route.js
+// app/api/users/route.js
 import connectDB from '@/config/database';
 import User from '@/models/User';
+import { PUBLIC_USER_FIELDS } from '@/utils/userProjections';
 
 export async function GET(request) {
   try {
@@ -35,8 +36,11 @@ export async function GET(request) {
     const sort = {};
     sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
+    // This endpoint is public — name the fields that may go out. `.lean()`
+    // returns raw BSON, so a projection is the only thing standing between a
+    // caller and every field on the document.
     const stores = await User.find(query)
-      .select('-bookmarks -email') // Exclude sensitive data
+      .select(PUBLIC_USER_FIELDS)
       .sort(sort)
       .lean();
 

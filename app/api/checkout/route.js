@@ -9,8 +9,9 @@ import Setting from '@/models/Setting';
 import { getSessionUser } from '@/utils/getSessionUser';
 import { calculateShipping, estimateDelivery, validateShippingAddress, getAvailableShippingMethods } from '@/utils/shipping';
 import { createPayFastPayment } from '@/utils/payfast';
-import { CourierServiceManager } from '@/utils/courierServices';
+import { CourierServiceManager, getLockerTariff } from '@/utils/courierServices';
 import { buildSellerSnapshot, buildParcelsForItem, summarizeParcels } from '@/utils/orderShippingHelpers';
+import { quoteCartShipping, resolveSelectedQuote } from '@/utils/checkoutQuotes';
 
 // Helper function to send JSON responses
 const jsonResponse = (data, status = 200) => {
@@ -219,6 +220,10 @@ export async function POST(request) {
       normalizedAddress.province = lockerSelection.province || normalizedAddress.province || '';
       normalizedAddress.postalCode = lockerSelection.postalCode || normalizedAddress.postalCode || '0000';
 
+      // The buyer chooses a locker and a size; the price and service code come
+      // from our own tariff table, never from the request body.
+      const lockerTariff = getLockerTariff(lockerSelection.lockerSize);
+
       lockerDetailsPayload = {
         provider: 'pudo',
         lockerId: lockerSelection.id || lockerSelection.lockerId || lockerSelection.lockerID,
@@ -228,9 +233,9 @@ export async function POST(request) {
         status: lockerSelection.status || 'pending',
         pickupPointId: lockerSelection.pickupPointId || lockerSelection.id || lockerSelection.lockerId || lockerSelection.lockerID,
         pickupPointProvider: lockerSelection.pickupPointProvider || 'tcg-locker',
-        lockerSize: lockerSelection.lockerSize || 'M',
-        serviceCode: lockerSelection.serviceCode || 'L2LM - ECO',
-        price: lockerSelection.price || 69,
+        lockerSize: lockerTariff.size,
+        serviceCode: lockerTariff.service_level_code,
+        price: lockerTariff.price,
       };
     } else if (fulfillmentOption === 'collection') {
       normalizedAddress.address = normalizedAddress.address || 'Collection - buyer to arrange pickup';
@@ -370,6 +375,16 @@ export async function POST(request) {
     const settings = await Setting.findOne();
     const taxEnabled = settings ? settings.taxEnabled : true;
 
+    // Re-quote shipping on the server. The browser tells us which courier
+    // service the buyer picked, but never what it costs — that is looked up
+    // from live quotes below. Trusting a client-supplied price meant a buyer
+    // could post `price: 0` and still have us book (and pay for) a real
+    // collection.
+    let serverQuotes = { quotesBySeller: {} };
+    if (fulfillmentOption === 'door-to-door') {
+      serverQuotes = await quoteCartShipping(cart, normalizedAddress);
+    }
+
     // Create separate orders for each seller using a transaction
     mongoSession = await mongoose.startSession();
     const createdOrders = [];
@@ -381,16 +396,30 @@ export async function POST(request) {
           
           let selectedCourierQuote = null;
 
-          // Calculate costs for this seller's order
+          // Shipping is priced entirely server-side. The client's selection is
+          // used only to pick *which* service, and is matched against the
+          // quotes we fetched ourselves above.
           const shippingCost = (() => {
-            const clientBest = clientShippingQuotes?.bestBySeller?.[sellerId];
-            if (clientBest && typeof clientBest === 'object' && typeof clientBest.price === 'number') {
-              selectedCourierQuote = clientBest;
-              return clientBest.price;
+            if (fulfillmentOption === 'collection') {
+              return 0; // Buyer collects from the seller — no courier involved.
             }
-            if (typeof clientBest === 'number' && !Number.isNaN(clientBest)) {
-              return clientBest;
+
+            if (fulfillmentOption === 'pudo') {
+              return lockerDetailsPayload?.price ?? getLockerTariff().price;
             }
+
+            const sellerQuotes = serverQuotes.quotesBySeller?.[sellerId];
+            const clientSelection = clientShippingQuotes?.bestBySeller?.[sellerId];
+            const quote = resolveSelectedQuote(sellerQuotes, clientSelection);
+
+            if (quote && typeof quote.price === 'number') {
+              selectedCourierQuote = quote;
+              return quote.price;
+            }
+
+            // Couriers didn't quote (API down, unserviceable address). Fall
+            // back to our own table rather than shipping for free.
+            console.warn(`No live courier quote for seller ${sellerId}; using fallback rate.`);
             return calculateShipping(
               orderData.items.map(item => ({
                 ...item,

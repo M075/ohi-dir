@@ -4,6 +4,7 @@ import User from '@/models/User';
 import Product from '@/models/Product';
 import Like from '@/models/Like';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { PUBLIC_USER_FIELDS } from '@/utils/userProjections';
 
 export async function GET(request) {
   try {
@@ -44,7 +45,7 @@ export async function GET(request) {
     sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
     const stores = await User.find(query)
-      .select('-bookmarks -email') // Exclude sensitive data
+      .select(PUBLIC_USER_FIELDS)
       .sort(sort)
       .lean();
 

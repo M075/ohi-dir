@@ -4,6 +4,7 @@ import User from '@/models/User';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/utils/authOptions';
 import { geocodeAddress, validateSAAddress } from '@/utils/geocoding';
+import { OWNER_USER_FIELDS } from '@/utils/userProjections';
 
 export async function POST(request, { params }) {
   try {
@@ -171,10 +172,14 @@ export async function PUT(request, { params }) {
 
     await user.save();
 
+    // Return the owner projection rather than the raw document — toObject()
+    // included reset tokens and every other schema field.
+    const safeUser = await User.findById(userId).select(OWNER_USER_FIELDS).lean();
+
     return Response.json({
       success: true,
       user: {
-        ...user.toObject(),
+        ...safeUser,
         geocoded: !!(user.latitude && user.longitude)
       }
     });

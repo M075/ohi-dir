@@ -163,12 +163,14 @@ const UserSchema = new Schema(
         return this.authProvider !== 'credentials';
       }
     },
-    emailVerificationToken: String,
-    emailVerificationExpires: Date,
-    
+    // Never returned unless explicitly requested with .select('+field').
+    // These are bearer credentials — a leaked reset token is account takeover.
+    emailVerificationToken: { type: String, select: false },
+    emailVerificationExpires: { type: Date, select: false },
+
     // Password reset
-    resetPasswordToken: String,
-    resetPasswordExpires: Date,
+    resetPasswordToken: { type: String, select: false },
+    resetPasswordExpires: { type: Date, select: false },
     
     // Account status
     isActive: {
@@ -198,31 +200,12 @@ const UserSchema = new Schema(
         'manage_couriers'
       ],
     }],
-    
-    // Bank details for payouts
-    bankDetails: {
-      accountHolderName: {
-        type: String,
-        default: '',
-      },
-      bankName: {
-        type: String,
-        default: '',
-      },
-      accountNumber: {
-        type: String,
-        default: '',
-      },
-      accountType: {
-        type: String,
-        enum: ['savings', 'current', 'transmission', ''],
-        default: 'savings',
-      },
-      branchCode: {
-        type: String,
-        default: '',
-      },
-    },
+
+    // Bank details deliberately do NOT live here. They are held once, on the
+    // Wallet model, where the payout flow reads them. This duplicate copy was
+    // never read or written by any code path — it existed only to be leaked by
+    // the public store endpoints. See scripts/strip-user-bank-details.mjs for
+    // clearing it from existing documents.
   },
   {
     timestamps: true,

@@ -3,13 +3,21 @@ import crypto from 'crypto';
 
 const disabledFlags = ['false', '0', 'off', 'disabled', 'no'];
 
+/**
+ * Signature verification and ITN processing can be switched off for local
+ * experimentation, but ONLY in sandbox. In live mode the flags are ignored:
+ * turning them off there means real money moves with nothing on our side
+ * confirming it, so the switches are deliberately unreachable.
+ */
 export const isPayFastSignatureRequired = () => {
+  if (!isPayFastSandbox()) return true;
   const flag = process.env.PAYFAST_REQUIRE_SIGNATURE;
   if (!flag) return true; // default to secure behaviour
   return !disabledFlags.includes(flag.toLowerCase());
 };
 
 export const isPayFastITNEnabled = () => {
+  if (!isPayFastSandbox()) return true;
   const flag = process.env.PAYFAST_ENABLE_ITN;
   if (!flag) return true;
   return !disabledFlags.includes(flag.toLowerCase());
@@ -136,11 +144,22 @@ export function generatePayFastSignature(data, passPhrase = null) {
     getString += `&passphrase=${pfUrlEncode(passPhrase)}`;
   }
 
-  console.log('Signature string:', getString);
-  const signature = crypto.createHash('md5').update(getString).digest('hex');
-  console.log('Generated signature:', signature);
-  
-  return signature;
+  // NOTE: never log `getString` — it contains the merchant passphrase in clear
+  // text, which is enough to forge payment notifications.
+  return crypto.createHash('md5').update(getString).digest('hex');
+}
+
+/**
+ * Resolve the passphrase to use for a given payload. Sandbox and live
+ * merchants have separate passphrases configured in the PayFast dashboard.
+ */
+export function getPayFastPassphrase(useSandbox = isPayFastSandbox()) {
+  if (useSandbox) {
+    return process.env.PAYFAST_SANDBOX_PASSPHRASE
+      ?? process.env.PAYFAST_PASSPHRASE
+      ?? null;
+  }
+  return process.env.PAYFAST_PASSPHRASE ?? null;
 }
 
 /**
@@ -150,14 +169,24 @@ export function generatePayFastSignature(data, passPhrase = null) {
 export function createPayFastPayment(orders, returnUrl, cancelUrl, notifyUrl) {
   const merchantId = process.env.PAYFAST_MERCHANT_ID;
   const merchantKey = process.env.PAYFAST_MERCHANT_KEY;
-  const passPhrase = process.env.PAYFAST_PASSPHRASE;
 
   // Sandbox vs live is driven by an explicit env var, NOT NODE_ENV.
   const useSandbox = isPayFastSandbox();
 
+  // Fail loudly rather than posting a form with `undefined` merchant details,
+  // which PayFast rejects with an unhelpful error the buyer sees.
   if (!useSandbox && (!merchantId || !merchantKey)) {
+    throw new Error(
+      'PayFast live mode is enabled but PAYFAST_MERCHANT_ID / PAYFAST_MERCHANT_KEY are missing.'
+    );
+  }
+
+  const passPhrase = getPayFastPassphrase(useSandbox);
+
+  if (!useSandbox && !passPhrase) {
     console.warn(
-      '⚠️ PayFast live mode is enabled but PAYFAST_MERCHANT_ID / PAYFAST_MERCHANT_KEY are missing.'
+      '⚠️ PayFast live mode has no PAYFAST_PASSPHRASE set. If a passphrase is ' +
+      'configured on the PayFast dashboard, every signature will mismatch.'
     );
   }
 
@@ -224,11 +253,7 @@ export function createPayFastPayment(orders, returnUrl, cancelUrl, notifyUrl) {
   }
 
   if (isPayFastSignatureRequired()) {
-    const sandboxPassphrase = process.env.PAYFAST_SANDBOX_PASSPHRASE;
-    const signaturePassphrase = useSandbox
-      ? (sandboxPassphrase ?? passPhrase ?? null)
-      : (passPhrase ?? null);
-    data.signature = generatePayFastSignature(data, signaturePassphrase);
+    data.signature = generatePayFastSignature(data, passPhrase);
   } else {
     delete data.signature;
   }
@@ -249,15 +274,74 @@ export function verifyPayFastPayment(postData, passPhrase = null) {
     return true;
   }
 
-  // Separate signature from data
-  const pfSignature = postData.signature;
-  delete postData.signature;
+  // Copy rather than mutate: the caller still needs the untouched payload
+  // (signature included) to POST back to PayFast for server confirmation.
+  const { signature: pfSignature, ...rest } = postData;
 
-  // Generate signature
-  const calculatedSignature = generatePayFastSignature(postData, passPhrase);
+  const calculatedSignature = generatePayFastSignature(rest, passPhrase);
 
-  // Compare signatures
-  return pfSignature === calculatedSignature;
+  return timingSafeEquals(pfSignature, calculatedSignature);
+}
+
+/**
+ * Constant-time string comparison, so a caller can't learn the expected
+ * signature byte-by-byte from response timing.
+ */
+function timingSafeEquals(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+/**
+ * Step 3 of PayFast's ITN security checklist: confirm the notification with
+ * PayFast's own servers.
+ *
+ * The signature check (step 1) proves the payload was signed with our
+ * passphrase; the IP check (step 2) is spoofable and PayFast rotate their
+ * ranges. Only this POST-back proves PayFast actually sent it, so it is the
+ * check that ultimately gates crediting an order. Send the payload back
+ * exactly as received — same fields, same order, signature included.
+ *
+ * Returns true only on an explicit "VALID" response.
+ */
+export async function validatePayFastITN(rawPairs, { timeoutMs = 10000 } = {}) {
+  const host = isPayFastSandbox()
+    ? 'https://sandbox.payfast.co.za'
+    : 'https://www.payfast.co.za';
+
+  const body = rawPairs
+    .map(([key, value]) => `${key}=${pfUrlEncode(value)}`)
+    .join('&');
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${host}/eng/query/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      console.error('PayFast validate returned HTTP', response.status);
+      return false;
+    }
+
+    const text = (await response.text()).trim();
+    return text.toUpperCase().startsWith('VALID');
+  } catch (error) {
+    // A network failure is not a validation — treat it as untrusted and let
+    // PayFast retry the notification.
+    console.error('PayFast validate request failed:', error.message);
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**

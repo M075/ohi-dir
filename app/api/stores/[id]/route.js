@@ -5,6 +5,7 @@ import Product from '@/models/Product';
 import Like from '@/models/Like';
 import { getSessionUser } from '@/utils/getSessionUser';
 import { resolveStore, isObjectId } from '@/utils/slugify';
+import { toPublicUser } from '@/utils/userProjections';
 
 export async function GET(request, { params }) {
   try {
@@ -60,8 +61,11 @@ export async function GET(request, { params }) {
       isLiked = !!existingLike;
     }
 
+    // resolveStore() hydrates the whole document with `.lean()`, so reduce it
+    // to the public shape here rather than spreading everything the schema
+    // happens to hold.
     const enrichedStore = {
-      ...store,
+      ...toPublicUser(store),
       likes: store.likes || 0,
       totalProducts: productCount,
       isLiked,

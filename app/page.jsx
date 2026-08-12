@@ -11,7 +11,6 @@ const Home = () => {
       <Hero2 data-oid="d02dj6j" />
       <Hero data-oid="93li2j0" />
       <RecentProducts data-oid="t_d7ljo" />
-      {console.log(process.env.MONGODB_URI)}
     </div>
   );
 };

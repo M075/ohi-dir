@@ -5,6 +5,7 @@ import Product from '@/models/Product';
 import Like from '@/models/Like';
 import { getSessionUser } from '@/utils/getSessionUser';
 import { getImagePresets } from '@/utils/imagekit';
+import { PUBLIC_USER_FIELDS } from '@/utils/userProjections';
 
 export async function GET(request) {
   try {
@@ -32,7 +33,7 @@ export async function GET(request) {
     let likedStores = [];
     if (storeIds.length > 0) {
       const stores = await User.find({ _id: { $in: storeIds } })
-        .select('-bookmarks -email')
+        .select(PUBLIC_USER_FIELDS)
         .lean();
 
       // Get product counts per store

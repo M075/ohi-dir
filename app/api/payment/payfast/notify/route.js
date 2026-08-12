@@ -2,12 +2,15 @@
 import connectDB from '@/config/database';
 import Order from '@/models/Order';
 import Product from '@/models/Product';
-import { 
-  verifyPayFastPayment, 
-  isValidPayFastIP, 
+import {
+  verifyPayFastPayment,
+  isValidPayFastIP,
   parsePayFastStatus,
   isPayFastSignatureRequired,
-  isPayFastITNEnabled
+  isPayFastITNEnabled,
+  isPayFastSandbox,
+  getPayFastPassphrase,
+  validatePayFastITN,
 } from '@/utils/payfast';
 import { getOrCreateWallet, calculatePlatformFee, getCommissionPercentage, recordLedgerEntries } from '@/utils/walletHelper';
 import { createShiplogicShipmentFromOrder } from '@/utils/courierServices';
@@ -31,22 +34,26 @@ export async function POST(request) {
                      request.headers.get('x-real-ip') || 
                      'unknown';
 
-    // Verify IP is from PayFast (in production)
-    if (process.env.NODE_ENV === 'production' && !isValidPayFastIP(clientIP)) {
-      console.error('Invalid PayFast IP:', clientIP);
-      return new Response('Invalid IP', { status: 403 });
-    }
-
-    // Parse form data
+    // Parse form data, preserving the order fields arrived in — PayFast's
+    // validate endpoint needs the payload echoed back byte for byte.
     const formData = await request.formData();
+    const rawPairs = [];
     const postData = {};
     for (const [key, value] of formData.entries()) {
+      rawPairs.push([key, value]);
       postData[key] = value;
     }
 
-    console.log('PayFast ITN received:', postData);
+    // Log identifiers only. The full payload carries the buyer's name, email
+    // and cell number, and ends up in the Vercel log stream.
+    console.log('PayFast ITN received:', {
+      m_payment_id: postData.m_payment_id,
+      pf_payment_id: postData.pf_payment_id,
+      payment_status: postData.payment_status,
+      clientIP,
+    });
 
-    // Verify signature if required / present
+    // --- Security check 1: signature -----------------------------------
     const signatureRequired = isPayFastSignatureRequired();
     const hasSignature = typeof postData.signature === 'string' && postData.signature.length > 0;
     if (signatureRequired && !hasSignature) {
@@ -55,11 +62,8 @@ export async function POST(request) {
     }
 
     if (hasSignature) {
-      const merchantId = postData.merchant_id;
-      const passPhrase = merchantId === '10000100'
-        ? (process.env.PAYFAST_SANDBOX_PASSPHRASE ?? process.env.PAYFAST_PASSPHRASE ?? null)
-        : (process.env.PAYFAST_PASSPHRASE ?? null);
-      const isValid = verifyPayFastPayment(postData, passPhrase);
+      const useSandbox = postData.merchant_id === '10000100' || isPayFastSandbox();
+      const isValid = verifyPayFastPayment(postData, getPayFastPassphrase(useSandbox));
 
       if (!isValid) {
         console.error('Invalid PayFast signature');
@@ -67,6 +71,27 @@ export async function POST(request) {
       }
     } else {
       console.log('PayFast signature not provided; skipping verification because requirement disabled.');
+    }
+
+    // --- Security check 2: source IP -----------------------------------
+    // Advisory only. PayFast rotate their ranges and the header is spoofable
+    // behind some proxies, so a mismatch is logged rather than fatal — the
+    // validate POST-back below is what actually gates processing.
+    if (!isValidPayFastIP(clientIP)) {
+      console.warn('PayFast ITN from unrecognised IP:', clientIP);
+    }
+
+    // --- Security check 3: confirm with PayFast's servers ---------------
+    // The one check an attacker cannot forge. Without it, anyone who learns
+    // the passphrase (or who replays a captured notification) can mark orders
+    // paid.
+    const confirmedByPayFast = await validatePayFastITN(rawPairs);
+    if (!confirmedByPayFast) {
+      console.error('PayFast did not confirm this ITN as valid; refusing to process.', {
+        m_payment_id: postData.m_payment_id,
+        pf_payment_id: postData.pf_payment_id,
+      });
+      return new Response('Validation failed', { status: 400 });
     }
 
     // Extract data
@@ -120,12 +145,41 @@ export async function POST(request) {
     const purchasedByBuyer = new Map();
 
     for (const order of orders) {
+      // --- Replay protection ------------------------------------------
+      // PayFast retries notifications, and a captured notification can be
+      // resubmitted by anyone who saw it. Claim each pf_payment_id once per
+      // order so repeat deliveries become no-ops.
+      const itnId = pf_payment_id ? String(pf_payment_id) : null;
+      const alreadyProcessed = itnId
+        && Array.isArray(order.paymentDetails?.processedItnIds)
+        && order.paymentDetails.processedItnIds.includes(itnId);
+
+      if (alreadyProcessed) {
+        console.log(`ITN ${itnId} already applied to ${order.orderNumber}; skipping.`);
+        continue;
+      }
+
+      // Never transition backwards out of paid. A late or replayed
+      // FAILED/CANCELLED notification must not cancel an order that PayFast
+      // already settled, or the stock-restore below would hand back inventory
+      // for goods that were actually sold.
+      if (order.paymentStatus === 'paid' && newPaymentStatus !== 'paid') {
+        console.warn(
+          `Refusing to move paid order ${order.orderNumber} to '${newPaymentStatus}' via ITN. Needs manual review.`
+        );
+        continue;
+      }
+
       order.paymentStatus = newPaymentStatus;
       order.paymentDetails = {
         ...order.paymentDetails,
         payfastPaymentId: m_payment_id,
         payfastTransactionId: pf_payment_id,
         paidAt: newPaymentStatus === 'paid' ? new Date() : null,
+        processedItnIds: [
+          ...(order.paymentDetails?.processedItnIds || []),
+          ...(itnId ? [itnId] : []),
+        ],
       };
 
       if (newPaymentStatus === 'paid') {

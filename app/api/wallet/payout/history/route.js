@@ -3,6 +3,7 @@
 import connectDB from '@/config/database';
 import Payout from '@/models/Payout';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { decryptField, maskAccountNumber } from '@/utils/fieldEncryption';
 
 // GET - Fetch payout history
 export async function GET(request) {
@@ -36,9 +37,21 @@ export async function GET(request) {
 
     const total = await Payout.countDocuments(query);
 
+    // The stored account number is encrypted; hand the client only the masked
+    // form so it never has to (and never can) reconstruct the full number.
+    const safePayouts = payouts.map(payout => {
+      const obj = payout.toObject();
+      if (obj.bankDetails?.accountNumber) {
+        obj.bankDetails.accountNumber = maskAccountNumber(
+          decryptField(obj.bankDetails.accountNumber)
+        );
+      }
+      return obj;
+    });
+
     return new Response(
       JSON.stringify({
-        payouts,
+        payouts: safePayouts,
         total,
         limit,
         skip,
