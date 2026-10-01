@@ -1,6 +1,7 @@
 // app/api/auth/register/route.js - Updated with role support
 import connectDB from '@/config/database';
 import User from '@/models/User';
+import { sendWelcomeEmail } from '@/utils/email';
 
 export async function POST(request) {
   try {
@@ -49,6 +50,15 @@ export async function POST(request) {
       role: userRole,
       isOnboarded: userRole === 'buyer', // Buyers are onboarded immediately, sellers need onboarding
       isVerifiedSeller: false, // Sellers need verification
+    });
+
+    // Welcome mail is best-effort by design: the account already exists, so a
+    // mail failure must not turn a successful signup into an error the user
+    // would retry (and then hit "email already exists" on).
+    await sendWelcomeEmail({
+      email: user.email,
+      storename: user.storename,
+      role: user.role,
     });
 
     return new Response(

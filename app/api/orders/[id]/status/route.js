@@ -6,18 +6,7 @@ import User from '@/models/User';
 import { getSessionUser } from '@/utils/getSessionUser';
 import { getOrCreateWallet, calculatePlatformFee } from '@/utils/walletHelper';
 import { createShiplogicShipmentFromOrder } from '@/utils/courierServices';
-
-// Helper function to send email notifications
-async function sendStatusUpdateEmail(order, buyer, seller) {
-  // TODO: Implement email notification
-  console.log(`📧 Email notification needed for order ${order.orderNumber}`);
-  
-  // Example structure:
-  // - Order confirmed → Send to buyer & seller
-  // - Order shipped → Send tracking info to buyer
-  // - Order delivered → Ask for review
-  // - Order cancelled → Notify both parties
-}
+import { sendOrderStatusEmails } from '@/utils/email';
 
 // PUT - Update order status
 export async function PUT(request, { params }) {
@@ -232,8 +221,11 @@ export async function PUT(request, { params }) {
       await order.save();
     }
 
-    // Send email notifications
-    await sendStatusUpdateEmail(order, order.buyer, order.seller);
+    // Notify whoever the new status concerns. Sent after every save above, so
+    // a shipped email always carries the tracking number that was just
+    // attached. previousStatus suppresses re-sending when a status is set to
+    // the value it already held.
+    await sendOrderStatusEmails({ order, status, previousStatus });
 
     // Return updated order
     return new Response(

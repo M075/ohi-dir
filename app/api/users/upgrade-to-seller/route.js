@@ -2,6 +2,7 @@
 import connectDB from '@/config/database';
 import User from '@/models/User';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { sendSellerUpgradeEmail } from '@/utils/email';
 
 export async function POST(request) {
   try {
@@ -32,8 +33,14 @@ export async function POST(request) {
       );
     }
 
+    // Walk them through the store/bank/product setup they now need to do.
+    await sendSellerUpgradeEmail({
+      email: user.email,
+      storename: user.storename,
+    });
+
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         success: true,
         user: {
           id: user._id,

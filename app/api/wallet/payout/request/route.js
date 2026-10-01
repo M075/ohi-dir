@@ -5,6 +5,7 @@ import connectDB from '@/config/database';
 import Wallet from '@/models/Wallet';
 import Payout from '@/models/Payout';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { sendPayoutRequestedEmails } from '@/utils/email';
 
 // POST - Request payout
 export async function POST(request) {
@@ -86,6 +87,11 @@ export async function POST(request) {
         payoutReference: payout.referenceNumber,
       },
     });
+
+    // Receipt for the seller, plus an alert to the admin mailbox — a payout
+    // request sits untouched until someone approves it, so it needs to be
+    // pushed rather than waiting to be noticed in the dashboard.
+    await sendPayoutRequestedEmails({ payout, seller: sessionUser.userId });
 
     return new Response(
       JSON.stringify({

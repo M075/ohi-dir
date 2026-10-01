@@ -3,6 +3,7 @@ import connectDB from '@/config/database';
 import User from '@/models/User';
 import Product from '@/models/Product';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { sendAccountSuspendedEmail, sendAccountReactivatedEmail } from '@/utils/email';
 
 export async function PATCH(request, { params }) {
   try {
@@ -77,8 +78,24 @@ export async function PATCH(request, { params }) {
 
     await store.save();
 
+    // A seller whose listings have just been pulled needs to be told, and told
+    // why — otherwise their first sign that anything happened is orders drying
+    // up.
+    if (action === 'suspend') {
+      await sendAccountSuspendedEmail({
+        email: store.email,
+        storename: store.storename,
+        reason: store.suspensionReason,
+      });
+    } else if (action === 'activate') {
+      await sendAccountReactivatedEmail({
+        email: store.email,
+        storename: store.storename,
+      });
+    }
+
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         store: {
           _id: store._id,
           storename: store.storename,

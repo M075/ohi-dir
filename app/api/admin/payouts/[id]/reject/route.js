@@ -6,6 +6,7 @@ import Payout from '@/models/Payout';
 import Wallet from '@/models/Wallet';
 import User from '@/models/User';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { sendPayoutRejectedEmail } from '@/utils/email';
 
 // POST - Reject payout
 export async function POST(request, { params }) {
@@ -75,8 +76,9 @@ export async function POST(request, { params }) {
       }
     }
 
-    // TODO: Send email notification to seller
-    // await sendPayoutRejectedEmail(payout.seller.email, payout, reason);
+    // The reason is the whole point of this email — without it the seller just
+    // sees a failed payout and no way to fix it.
+    await sendPayoutRejectedEmail({ payout, seller: payout.seller, reason });
 
     return new Response(
       JSON.stringify({

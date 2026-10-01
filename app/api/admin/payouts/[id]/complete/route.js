@@ -6,6 +6,7 @@ import Payout from '@/models/Payout';
 import Wallet from '@/models/Wallet';
 import User from '@/models/User';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { sendPayoutCompletedEmail } from '@/utils/email';
 
 // POST - Mark payout as completed
 export async function POST(request, { params }) {
@@ -70,8 +71,9 @@ export async function POST(request, { params }) {
       }
     }
 
-    // TODO: Send email notification to seller
-    // await sendPayoutCompletedEmail(payout.seller.email, payout);
+    // Carries the bank reference, which is what the seller needs to trace the
+    // deposit on their statement.
+    await sendPayoutCompletedEmail({ payout, seller: payout.seller });
 
     return new Response(
       JSON.stringify({

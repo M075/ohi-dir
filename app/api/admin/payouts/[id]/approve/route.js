@@ -6,6 +6,7 @@ import Payout from '@/models/Payout';
 import Wallet from '@/models/Wallet';
 import User from '@/models/User';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { sendPayoutApprovedEmail } from '@/utils/email';
 
 // POST - Approve payout
 export async function POST(request, { params }) {
@@ -68,8 +69,9 @@ export async function POST(request, { params }) {
       }
     }
 
-    // TODO: Send email notification to seller
-    // await sendPayoutApprovedEmail(payout.seller.email, payout);
+    // payout.seller is populated with storename + email above, so this needs
+    // no extra lookup.
+    await sendPayoutApprovedEmail({ payout, seller: payout.seller });
 
     return new Response(
       JSON.stringify({

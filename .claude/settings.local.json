@@ -13,7 +13,9 @@
       "WebFetch(domain:developers.payfast.co.za)",
       "WebSearch",
       "WebFetch(domain:hosting.devdarren.com)",
-      "WebFetch(domain:payfast.kayako.com)"
+      "WebFetch(domain:payfast.kayako.com)",
+      "PowerShell(npm run *)",
+      "Bash(curl -s -o /dev/null http://localhost:3000/api/admin/email-test)"
     ]
   }
 }

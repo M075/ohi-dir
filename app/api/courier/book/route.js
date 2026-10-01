@@ -3,6 +3,7 @@ import Order from '@/models/Order';
 import { getSessionUser } from '@/utils/getSessionUser';
 import { CourierServiceManager, createPUDOShipmentFromOrder } from '@/utils/courierServices';
 import { normalizeAddress, normalizeParcels, buildParcelsFromOrder } from '@/utils/courierHelpers';
+import { sendOrderShippedEmail } from '@/utils/email';
 
 export async function POST(request) {
   try {
@@ -205,6 +206,11 @@ export async function POST(request) {
     });
 
     await order.save();
+
+    // Tell the buyer their parcel is moving, with whatever tracking reference
+    // the courier just handed back. Awaited rather than left floating: an
+    // unsettled promise is discarded once this response is returned.
+    await sendOrderShippedEmail({ order });
 
     return new Response(
       JSON.stringify({ success: true, order, shipment }),

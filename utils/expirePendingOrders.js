@@ -24,6 +24,7 @@ import connectDB from '@/config/database';
 import Order from '@/models/Order';
 import Product from '@/models/Product';
 import Setting from '@/models/Setting';
+import { sendOrderExpiredEmail } from '@/utils/email';
 
 const DEFAULT_TIMEOUT_MINUTES = 30;
 const DEFAULT_BATCH_LIMIT = 50;
@@ -37,8 +38,12 @@ export function getPendingOrderTimeoutMinutes() {
  *
  * Batched: a backlog is worked through over several passes rather than in one
  * long request, so this stays safe to call from a user-facing route.
+ *
+ * `notify` can be turned off by callers that only care about the stock release
+ * (a backfill over an old backlog, say, where mailing buyers about orders they
+ * abandoned weeks ago would be noise rather than news).
  */
-export async function expirePendingOrders({ limit = DEFAULT_BATCH_LIMIT } = {}) {
+export async function expirePendingOrders({ limit = DEFAULT_BATCH_LIMIT, notify = true } = {}) {
   await connectDB();
 
   const timeoutMinutes = getPendingOrderTimeoutMinutes();
@@ -54,6 +59,7 @@ export async function expirePendingOrders({ limit = DEFAULT_BATCH_LIMIT } = {}) 
   }).limit(limit);
 
   const cancelledOrderNumbers = [];
+  const pendingEmails = [];
 
   for (const order of staleOrders) {
     // Release reserved stock (guarded so it can never double-restore).
@@ -79,6 +85,18 @@ export async function expirePendingOrders({ limit = DEFAULT_BATCH_LIMIT } = {}) 
 
     await order.save();
     cancelledOrderNumbers.push(order.orderNumber);
+
+    // A buyer who closed the PayFast tab has no other way of learning that
+    // their order is gone and their items are back on sale.
+    if (notify) {
+      pendingEmails.push(sendOrderExpiredEmail({ order, timeoutMinutes }));
+    }
+  }
+
+  // One parallel batch rather than a send per iteration, so a sweep triggered
+  // off the back of a checkout adds a single round trip at most.
+  if (pendingEmails.length) {
+    await Promise.allSettled(pendingEmails);
   }
 
   return {
@@ -105,6 +123,7 @@ export async function expirePendingOrders({ limit = DEFAULT_BATCH_LIMIT } = {}) 
 export async function maybeExpirePendingOrders({
   minIntervalMinutes = 5,
   limit = DEFAULT_BATCH_LIMIT,
+  notify = true,
 } = {}) {
   try {
     await connectDB();
@@ -127,7 +146,7 @@ export async function maybeExpirePendingOrders({
 
     if (!claimed) return null;
 
-    return await expirePendingOrders({ limit });
+    return await expirePendingOrders({ limit, notify });
   } catch (error) {
     // A duplicate-key error means another instance won the upsert race, which
     // is the expected outcome under concurrency, not a problem.

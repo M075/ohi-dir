@@ -15,6 +15,11 @@ import {
 import { getOrCreateWallet, calculatePlatformFee, getCommissionPercentage, recordLedgerEntries } from '@/utils/walletHelper';
 import { createShiplogicShipmentFromOrder } from '@/utils/courierServices';
 import { clearPurchasedItemsFromCart } from '@/utils/cartHelpers';
+import {
+  sendOrderPaidEmails,
+  sendOrderShippedEmail,
+  sendOrderPaymentFailedEmail,
+} from '@/utils/email';
 
 /**
  * PayFast Instant Transaction Notification (ITN) handler
@@ -146,6 +151,13 @@ export async function POST(request) {
     // payment is confirmed 'paid'.
     const purchasedByBuyer = new Map();
 
+    // Emails are queued rather than sent inside the loop, so one order's mail
+    // round trip doesn't delay the next order's database writes. They are all
+    // awaited together before we answer PayFast — a promise left unsettled when
+    // the response goes out is dropped by the serverless runtime, i.e. never
+    // actually sent.
+    const pendingEmails = [];
+
     for (const order of orders) {
       // --- Replay protection ------------------------------------------
       // PayFast retries notifications, and a captured notification can be
@@ -263,6 +275,8 @@ export async function POST(request) {
 
       await order.save();
 
+      let shipmentJustBooked = false;
+
       // Create shipment on Shiplogic for door-to-door deliveries after payment is confirmed
       if (newPaymentStatus === 'paid' && order.fulfillmentOption === 'door-to-door' && !order.courierReference) {
         try {
@@ -281,7 +295,9 @@ export async function POST(request) {
               timestamp: new Date(),
               note: `Shipment created on Shiplogic - Reference: ${shipmentResult.shipmentId}`,
             });
-            
+
+            shipmentJustBooked = true;
+
             console.log(`✅ Shipment created successfully for ${order.orderNumber}:`, {
               shipmentId: shipmentResult.shipmentId,
               trackingNumber: shipmentResult.trackingReference,
@@ -300,6 +316,24 @@ export async function POST(request) {
         console.log(`ℹ️ Order ${order.orderNumber} uses ${order.fulfillmentOption} fulfillment - skipping Shiplogic shipment creation`);
       }
 
+      // Notify both parties. This is the authoritative "order placed" moment:
+      // the return URL proves nothing, so the receipt can only be sent once
+      // PayFast has confirmed the payment here. The replay guard above means
+      // each ITN reaches this point at most once per order, so retried
+      // notifications don't re-send anything.
+      if (newPaymentStatus === 'paid') {
+        pendingEmails.push(sendOrderPaidEmails({ order }));
+
+        // Door-to-door orders are booked with the courier immediately above,
+        // so the buyer gets the tracking number in the same breath rather than
+        // waiting for a separate status update that never comes.
+        if (shipmentJustBooked) {
+          pendingEmails.push(sendOrderShippedEmail({ order }));
+        }
+      } else if (newPaymentStatus === 'failed') {
+        pendingEmails.push(sendOrderPaymentFailedEmail({ order }));
+      }
+
       console.log('Order updated:', order.orderNumber, 'Status:', newPaymentStatus);
     }
 
@@ -308,6 +342,14 @@ export async function POST(request) {
     // while paying is preserved), and it is idempotent across ITN retries.
     for (const [buyerId, productIdSet] of purchasedByBuyer) {
       await clearPurchasedItemsFromCart(buyerId, [...productIdSet]);
+    }
+
+    // Flush the queued notifications. allSettled, because every send function
+    // already swallows its own failures — and even if one did reject, a mail
+    // problem must not make us return an error to PayFast, which would have
+    // them retry an ITN we have fully processed.
+    if (pendingEmails.length) {
+      await Promise.allSettled(pendingEmails);
     }
 
     // Respond with success

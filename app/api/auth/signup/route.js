@@ -1,6 +1,7 @@
 // app/api/auth/signup/route.js - FIXED VERSION
 import connectDB from '@/config/database';
 import User from '@/models/User';
+import { sendWelcomeEmail } from '@/utils/email';
 
 export async function POST(request) {
   try {
@@ -68,6 +69,14 @@ export async function POST(request) {
     });
 
     console.log('User created successfully (no geocoding):', user._id);
+
+    // Best-effort: the account is already created, so a mail failure must not
+    // be reported as a failed signup.
+    await sendWelcomeEmail({
+      email: user.email,
+      storename: user.storename,
+      role: user.role,
+    });
 
     return new Response(
       JSON.stringify({
