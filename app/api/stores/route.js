@@ -4,7 +4,7 @@ import User from '@/models/User';
 import Product from '@/models/Product';
 import Like from '@/models/Like';
 import { getSessionUser } from '@/utils/getSessionUser';
-import { PUBLIC_USER_FIELDS } from '@/utils/userProjections';
+import { STORE_MAP_FIELDS, coarsenCoordinate } from '@/utils/userProjections';
 
 export async function GET(request) {
   try {
@@ -45,7 +45,7 @@ export async function GET(request) {
     sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
 
     const stores = await User.find(query)
-      .select(PUBLIC_USER_FIELDS)
+      .select(STORE_MAP_FIELDS)
       .sort(sort)
       .lean();
 
@@ -84,6 +84,10 @@ export async function GET(request) {
       const storeIdStr = store._id.toString();
       return {
         ...store,
+        // Coarsened to a ~1 km grid before it leaves the server: the map needs
+        // a pin, not the seller's exact home position.
+        latitude: coarsenCoordinate(store.latitude),
+        longitude: coarsenCoordinate(store.longitude),
         likes: store.likes || 0,
         totalProducts: productCountMap.get(storeIdStr) || 0,
         isLiked: likedStoreIds.has(storeIdStr),

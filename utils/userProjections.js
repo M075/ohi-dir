@@ -29,6 +29,40 @@ export const PUBLIC_USER_FIELDS = [
 ].join(' ');
 
 /**
+ * The stores map needs the pin coordinates on top of the public shape.
+ *
+ * Kept out of PUBLIC_USER_FIELDS on purpose: these are the seller's own
+ * geocoded home address, and this list is what leaves the server on public
+ * endpoints. Only the stores list route uses this projection, and it coarsens
+ * the values before responding — see coarsenCoordinate().
+ */
+export const STORE_MAP_FIELDS = [
+  PUBLIC_USER_FIELDS,
+  'latitude',
+  'longitude',
+].join(' ');
+
+/**
+ * Coarsen a coordinate to a ~1 km grid.
+ *
+ * The map only needs a pin somewhere sensible in a city, not a house. Two
+ * decimal places is about 1.1 km of latitude and 1.0 km of longitude at
+ * South African latitudes, which keeps the pin on the right side of the city
+ * without publishing a position that can be pointed at a door. Returns null
+ * for missing or non-numeric input so the caller can drop the pin entirely
+ * rather than plot it at null island.
+ */
+export function coarsenCoordinate(value, decimals = 2) {
+  if (value === null || value === undefined || value === '') return null;
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  const factor = 10 ** decimals;
+  const rounded = Math.round(num * factor) / factor;
+  // Normalise -0 to 0 so callers can use a plain truthiness check.
+  return rounded === 0 ? 0 : rounded;
+}
+
+/**
  * Additionally visible to the account owner and to admins: contact details and
  * onboarding state. Still excludes credentials, tokens, and admin grants —
  * nothing here should be settable or readable as a route to privilege.

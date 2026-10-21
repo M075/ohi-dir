@@ -11,7 +11,11 @@ export async function searchAddresses(query, country = 'South Africa') {
   const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
   
   if (!mapboxToken) {
-    console.error('Mapbox token not configured');
+    console.error(
+      'Mapbox token not configured: NEXT_PUBLIC_MAPBOX_TOKEN is empty. ' +
+      'NEXT_PUBLIC_* values are inlined at build time, so a missing variable ' +
+      'means the bundle shipped without a token — set it and rebuild.'
+    );
     return [];
   }
 
@@ -28,7 +32,13 @@ export async function searchAddresses(query, country = 'South Africa') {
     );
 
     if (!response.ok) {
-      throw new Error('Failed to fetch addresses from Mapbox');
+      // Surface Mapbox's own message and status. A 401 (token revoked or
+      // URL-restricted) and a 402/403 (out of quota, billing lapsed) look
+      // identical from the outside otherwise.
+      const body = await response.text().catch(() => '');
+      throw new Error(
+        `Mapbox geocoding failed (${response.status} ${response.statusText}): ${body.slice(0, 300)}`
+      );
     }
 
     const data = await response.json();

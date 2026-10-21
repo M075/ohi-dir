@@ -50,9 +50,11 @@ export default function Mapbox3DStoresMap({ stores = [], onStoreSelect }) {
     }
   };
 
-  // Filter stores with valid coordinates
+  // Filter stores with valid coordinates. Compare against null rather than
+  // testing truthiness: the API hands us coarsened values, and a legitimate
+  // 0 is a real coordinate, not a missing one.
   const storesWithCoordinates = stores.filter(
-    store => store.latitude && store.longitude
+    store => store.latitude != null && store.longitude != null
   );
 
   // Close style menu when clicking outside
