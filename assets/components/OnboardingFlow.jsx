@@ -241,7 +241,7 @@ export default function OnboardingFlow() {
 
       <div className="fixed inset-0 bg-zinc-50/30 dark:bg-black/40" />
       <div className="relative z-10 w-full max-w-6xl px-4">
-      <Card className="border-none bg-zinc-300/10 backdrop-blur-md shadow-lg dark:bg-black/40 dark:backdrop-blur-md px-6 py-6 sm:px-10 lg:px-16 lg:py-6 lg:mt-10 max-w-3xl mx-auto">
+      <Card className="border-none bg-zinc-100/80 shadow-lg dark:bg-black/80 px-6 py-6 sm:px-10 lg:px-16 lg:py-6 lg:mt-10 max-w-3xl mx-auto">
         <CardHeader>
           <div className="flex flex-row items-center justify-between">
             <CardTitle className="text-2xl">Welcome! </CardTitle>
@@ -312,7 +312,9 @@ export default function OnboardingFlow() {
                     autoComplete="off"
                     className={`bg-white/35 dark:bg-black/40 ${errors.address ? 'border-red-500' : ''}`}
                   />
-                  
+                   <p className="text-sm text-muted-foreground mt-1">
+                      Your exact address will not be displayed publicly.
+                    </p>
                   {/* Address suggestions dropdown */}
                   {showSuggestions && addressSuggestions.length > 0 && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
@@ -404,7 +406,7 @@ export default function OnboardingFlow() {
               
               {/* Logo Upload */}
               <div>
-                <Label>Store Logo (Optional)</Label>
+                <Label>Store Logo <span className="text-red-500">*</span></Label>
                 <div className="mt-2">
                   {logoPreview ? (
                     <div className="relative inline-block">
@@ -431,6 +433,7 @@ export default function OnboardingFlow() {
                         accept="image/*"
                         onChange={handleLogoChange}
                         className="hidden"
+                        required
                       />
                     </label>
                   )}

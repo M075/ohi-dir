@@ -31,6 +31,7 @@ import {
   ChevronRight,
   Package,
   DollarSign,
+  Trash2,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -126,6 +127,39 @@ export default function AdminStoresClient() {
       toast({
         title: "Error",
         description: "Action failed. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleStoreDelete = async (storeId) => {
+    if (!window.confirm("Are you sure you want to delete this store? This cannot be undone.")) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/stores/${storeId}`, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        toast({
+          title: "Deleted",
+          description: "Store deleted successfully",
+        });
+        fetchStores();
+      } else {
+        const data = await res.json();
+        toast({
+          title: "Error",
+          description: data.error || "Delete failed",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error deleting store:", error);
+      toast({
+        title: "Error",
+        description: "Delete failed. Please try again.",
         variant: "destructive",
       });
     }
@@ -238,7 +272,6 @@ export default function AdminStoresClient() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <DollarSign className="h-4 w-4 text-muted-foreground" />
                           <span>R {(store.totalSales || 0).toFixed(2)}</span>
                         </div>
                       </TableCell>
@@ -278,6 +311,14 @@ export default function AdminStoresClient() {
                               <CheckCircle className="h-4 w-4 text-green-500" />
                             </Button>
                           )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            title="Delete Store"
+                            onClick={() => handleStoreDelete(store._id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>

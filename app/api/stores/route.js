@@ -20,9 +20,12 @@ export async function GET(request) {
     const sortBy = searchParams.get('sortBy') || 'createdAt';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
 
-    // Build query - Only include sellers and admins, exclude buyers
+    // Build query - Only include active sellers. Suspended stores
+    // (isActive = false) are hidden from the public /stores page until
+    // an admin reactivates them via the dashboard.
     let query = {
-      role: { $in: ['seller'] }
+      role: { $in: ['seller'] },
+      isActive: true,
     };
 
     if (search) {

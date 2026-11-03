@@ -115,6 +115,54 @@ export async function PATCH(request, { params }) {
   }
 }
 
+export async function DELETE(request, { params }) {
+  try {
+    await connectDB();
+    const sessionUser = await getSessionUser();
+
+    if (!sessionUser?.userId) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const admin = await User.findById(sessionUser.userId);
+    if (!admin?.isAdmin) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden - Admin access required' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { id } = await params;
+
+    const store = await User.findById(id);
+    if (!store) {
+      return new Response(
+        JSON.stringify({ error: 'Store not found' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Remove all products belonging to the store
+    await Product.deleteMany({ owner: id });
+
+    await store.deleteOne();
+
+    return new Response(
+      JSON.stringify({ message: 'Store deleted successfully' }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  } catch (error) {
+    console.error('Admin store delete error:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+}
+
 export async function GET(request, { params }) {
   try {
     await connectDB();
@@ -136,7 +184,7 @@ export async function GET(request, { params }) {
     }
 
     const { id } = await params;
-    
+
     const store = await User.findById(id).select('-password');
     if (!store) {
       return new Response(
@@ -149,7 +197,7 @@ export async function GET(request, { params }) {
     const productsCount = await Product.countDocuments({ owner: id });
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         store: {
           ...store.toObject(),
           productsCount
