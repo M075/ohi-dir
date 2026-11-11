@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/components/hooks/use-toast';
-import { Loader2, Save, Percent } from 'lucide-react';
+import { Loader2, Save, Percent, CreditCard } from 'lucide-react';
 import AdminDashboardShell from '@/assets/components/AdminDashboardShell';
 
 export default function AdminSettingsPage() {
@@ -19,6 +19,7 @@ export default function AdminSettingsPage() {
   const [settings, setSettings] = useState({
     taxEnabled: true,
     commissionPercentage: 15,
+    minimumPayout: 500,
   });
 
   useEffect(() => {
@@ -41,6 +42,7 @@ export default function AdminSettingsPage() {
         setSettings({
           taxEnabled: data.taxEnabled ?? true,
           commissionPercentage: data.commissionPercentage ?? 15,
+          minimumPayout: data.minimumPayout ?? 500,
         });
       } else {
         throw new Error('Failed to fetch settings');
@@ -66,6 +68,16 @@ export default function AdminSettingsPage() {
       setSettings((prev) => ({
         ...prev,
         commissionPercentage: Math.min(100, Math.max(0, value)),
+      }));
+    }
+  };
+
+  const handleMinimumPayoutChange = (e) => {
+    const value = parseFloat(e.target.value);
+    if (!isNaN(value)) {
+      setSettings((prev) => ({
+        ...prev,
+        minimumPayout: Math.max(0, value),
       }));
     }
   };
@@ -204,6 +216,40 @@ export default function AdminSettingsPage() {
                     R {(1000 - (1000 * settings.commissionPercentage / 100)).toFixed(2)}
                   </span>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Payout Settings Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CreditCard className="h-5 w-5 text-emerald-600" />
+                Payout Settings
+              </CardTitle>
+              <CardDescription>
+                Configure the minimum amount sellers can request as a payout.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="minimumPayout">Minimum Payout Amount</Label>
+                <div className="flex items-center gap-3">
+                  <Input
+                    id="minimumPayout"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={settings.minimumPayout}
+                    onChange={handleMinimumPayoutChange}
+                    className="w-32"
+                  />
+                  <span className="text-sm text-muted-foreground font-medium">ZAR</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Sellers cannot request a payout below this amount. Changing this
+                  updates the request-payout validation on the wallet page.
+                </p>
               </div>
             </CardContent>
           </Card>

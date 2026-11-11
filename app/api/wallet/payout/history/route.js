@@ -1,7 +1,8 @@
+// ============================================================================
 // FILE 7: app/api/wallet/payout/history/route.js
 // ============================================================================
 import connectDB from '@/config/database';
-import Payout from '@/models/Payout';
+import PayoutRequest from '@/models/PayoutRequest';
 import { getSessionUser } from '@/utils/getSessionUser';
 import { decryptField, maskAccountNumber } from '@/utils/fieldEncryption';
 
@@ -24,30 +25,24 @@ export async function GET(request) {
     const status = searchParams.get('status');
 
     let query = { seller: sessionUser.userId };
-    
+
     if (status && status !== 'all') {
       query.status = status;
     }
 
-    const payouts = await Payout.find(query)
-      .sort({ createdAt: -1 })
+    const payoutRequests = await PayoutRequest.find(query)
+      .sort({ requestedAt: -1 })
       .limit(limit)
       .skip(skip)
-      .select('-processedBy');
+      .lean();
 
-    const total = await Payout.countDocuments(query);
+    const total = await PayoutRequest.countDocuments(query);
 
-    // The stored account number is encrypted; hand the client only the masked
-    // form so it never has to (and never can) reconstruct the full number.
-    const safePayouts = payouts.map(payout => {
-      const obj = payout.toObject();
-      if (obj.bankDetails?.accountNumber) {
-        obj.bankDetails.accountNumber = maskAccountNumber(
-          decryptField(obj.bankDetails.accountNumber)
-        );
-      }
-      return obj;
-    });
+    // The bank details snapshot only ever holds masked values — safe to return.
+    const safePayouts = payoutRequests.map(payout => ({
+      ...payout,
+      bankDetails: payout.bankDetailsSnapshot || null,
+    }));
 
     return new Response(
       JSON.stringify({
@@ -67,4 +62,3 @@ export async function GET(request) {
     );
   }
 }
-

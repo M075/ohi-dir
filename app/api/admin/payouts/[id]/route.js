@@ -2,11 +2,11 @@
 // FILE 5: app/api/admin/payouts/[id]/route.js
 // ============================================================================
 import connectDB from '@/config/database';
-import Payout from '@/models/Payout';
+import PayoutRequest from '@/models/PayoutRequest';
 import User from '@/models/User';
 import { getSessionUser } from '@/utils/getSessionUser';
 
-// GET - Fetch single payout details
+// GET - Fetch single payout request details
 export async function GET(request, { params }) {
   try {
     await connectDB();
@@ -23,24 +23,24 @@ export async function GET(request, { params }) {
 
     const { id } = params;
 
-    const payout = await Payout.findById(id)
+    const payoutRequest = await PayoutRequest.findById(id)
       .populate('seller', 'storename email phone image address city province')
       .populate('processedBy', 'storename email');
 
-    if (!payout) {
+    if (!payoutRequest) {
       return new Response(
-        JSON.stringify({ error: 'Payout not found' }),
+        JSON.stringify({ error: 'Payout request not found' }),
         { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
     return new Response(
-      JSON.stringify({ payout }),
+      JSON.stringify({ payout: payoutRequest }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Payout details error:', error);
+    console.error('Payout request details error:', error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }

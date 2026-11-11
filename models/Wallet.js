@@ -74,6 +74,14 @@ const WalletSchema = new Schema({
     default: 0,
     min: 0,
   },
+  // Amount reserved for pending payout requests. Funds here cannot be spent
+  // until the payout is completed (deducted) or rejected (released back to
+  // availableBalance).
+  reservedBalance: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
   pendingBalance: {
     type: Number,
     default: 0,
@@ -172,6 +180,10 @@ WalletSchema.index({ 'transactions.type': 1, 'transactions.status': 1 });
 
 // Methods
 WalletSchema.methods.addTransaction = async function(transactionData) {
+  if (!this.isActive) {
+    throw new Error(`Wallet is frozen: ${this.holdReason || 'Account suspended'}`);
+  }
+
   const { type, amount, fee = 0, status = 'pending', description, order, buyer, paymentMethod, metadata } = transactionData;
   
   const net = amount - fee;
@@ -215,6 +227,10 @@ WalletSchema.methods.addTransaction = async function(transactionData) {
 };
 
 WalletSchema.methods.completeTransaction = async function(transactionId) {
+  if (!this.isActive) {
+    throw new Error(`Wallet is frozen: ${this.holdReason || 'Account suspended'}`);
+  }
+
   const transaction = this.transactions.id(transactionId);
   
   if (!transaction) {

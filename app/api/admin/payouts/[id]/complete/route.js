@@ -2,10 +2,11 @@
 // FILE 4: app/api/admin/payouts/[id]/complete/route.js
 // ============================================================================
 import connectDB from '@/config/database';
-import Payout from '@/models/Payout';
+import PayoutRequest from '@/models/PayoutRequest';
 import Wallet from '@/models/Wallet';
 import User from '@/models/User';
 import { getSessionUser } from '@/utils/getSessionUser';
+import { addTransactionAtomically } from '@/utils/walletHelper';
 import { sendPayoutCompletedEmail } from '@/utils/email';
 
 // POST - Mark payout as completed
@@ -27,64 +28,96 @@ export async function POST(request, { params }) {
     const body = await request.json();
     const { externalReference, notes } = body;
 
-    const payout = await Payout.findById(id).populate('seller', 'storename email');
+    const payoutRequest = await PayoutRequest.findById(id).populate('seller', 'storename email');
 
-    if (!payout) {
+    if (!payoutRequest) {
       return new Response(
-        JSON.stringify({ error: 'Payout not found' }),
+        JSON.stringify({ error: 'Payout request not found' }),
         { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    if (payout.status !== 'processing') {
+    if (payoutRequest.status !== 'approved' && payoutRequest.status !== 'processing') {
       return new Response(
-        JSON.stringify({ error: `Can only complete payouts with status 'processing'` }),
+        JSON.stringify({ error: `Can only complete payouts with status 'approved' or 'processing'` }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // Update payout status
-    payout.status = 'completed';
-    payout.completedAt = new Date();
-    
+    // Update payout request status
+    payoutRequest.status = 'completed';
+    payoutRequest.completedAt = new Date();
+
     if (externalReference) {
-      payout.externalReference = externalReference;
+      payoutRequest.externalReference = externalReference;
     }
     if (notes) {
-      payout.notes = payout.notes 
-        ? `${payout.notes}\n${notes}` 
+      payoutRequest.notes = payoutRequest.notes
+        ? `${payoutRequest.notes}\n${notes}`
         : notes;
     }
 
-    await payout.save();
+    await payoutRequest.save();
 
-    // Update wallet transaction
-    const wallet = await Wallet.findOne({ seller: payout.seller._id });
+    // Release reserved balance and deduct from available
+    const wallet = await Wallet.findOne({ seller: payoutRequest.seller._id });
     if (wallet) {
+      if (wallet.reservedBalance < payoutRequest.amount) {
+        return new Response(
+          JSON.stringify({ error: 'Insufficient reserved balance' }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      wallet.reservedBalance -= payoutRequest.amount;
+      wallet.availableBalance -= payoutRequest.amount;
+      wallet.totalPayouts += payoutRequest.amount;
+
+      // Mark the matching payout transaction as completed
       const transaction = wallet.transactions.find(
-        t => t.type === 'payout' && t.metadata?.get('payoutReference') === payout.referenceNumber
+        t => t.type === 'payout' && t.metadata?.payoutReference === payoutRequest.referenceNumber
       );
 
       if (transaction) {
         transaction.status = 'completed';
-        await wallet.save();
       }
+
+      await wallet.save();
+
+      // Record a completed payout ledger transaction (idempotent)
+      await addTransactionAtomically({
+        walletId: wallet._id,
+        type: 'payout',
+        amount: payoutRequest.amount,
+        fee: 0,
+        status: 'completed',
+        description: `Payout completed by admin - ${payoutRequest.referenceNumber}`,
+        paymentMethod: 'bank_transfer',
+        metadata: {
+          payoutReference: payoutRequest.referenceNumber,
+          processedBy: admin._id,
+          externalReference,
+          completedAt: payoutRequest.completedAt,
+        },
+        idempotencyKey: `payout-complete-${payoutRequest._id}`,
+      });
     }
 
-    // Carries the bank reference, which is what the seller needs to trace the
-    // deposit on their statement.
-    await sendPayoutCompletedEmail({ payout, seller: payout.seller });
+    await sendPayoutCompletedEmail({
+      payout: payoutRequest,
+      seller: payoutRequest.seller,
+    });
 
     return new Response(
       JSON.stringify({
         success: true,
         message: 'Payout marked as completed',
         payout: {
-          _id: payout._id,
-          referenceNumber: payout.referenceNumber,
-          status: payout.status,
-          completedAt: payout.completedAt,
-          externalReference: payout.externalReference,
+          _id: payoutRequest._id,
+          referenceNumber: payoutRequest.referenceNumber,
+          status: payoutRequest.status,
+          completedAt: payoutRequest.completedAt,
+          externalReference: payoutRequest.externalReference,
         },
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -98,4 +131,3 @@ export async function POST(request, { params }) {
     );
   }
 }
-

@@ -39,6 +39,7 @@ export async function GET(request) {
     return new Response(
       JSON.stringify({
         balance: wallet.availableBalance,
+        reservedBalance: wallet.reservedBalance,
         pendingBalance: wallet.pendingBalance,
         totalEarnings: wallet.totalEarnings,
         totalPayouts: wallet.totalPayouts,

@@ -2,7 +2,7 @@
 // FILE 2: app/api/admin/payouts/[id]/approve/route.js
 // ============================================================================
 import connectDB from '@/config/database';
-import Payout from '@/models/Payout';
+import PayoutRequest from '@/models/PayoutRequest';
 import Wallet from '@/models/Wallet';
 import User from '@/models/User';
 import { getSessionUser } from '@/utils/getSessionUser';
@@ -27,40 +27,40 @@ export async function POST(request, { params }) {
     const body = await request.json();
     const { externalReference, notes } = body;
 
-    const payout = await Payout.findById(id).populate('seller', 'storename email');
+    const payoutRequest = await PayoutRequest.findById(id).populate('seller', 'storename email');
 
-    if (!payout) {
+    if (!payoutRequest) {
       return new Response(
-        JSON.stringify({ error: 'Payout not found' }),
+        JSON.stringify({ error: 'Payout request not found' }),
         { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    if (payout.status !== 'pending') {
+    if (payoutRequest.status !== 'pending') {
       return new Response(
-        JSON.stringify({ error: `Cannot approve payout with status: ${payout.status}` }),
+        JSON.stringify({ error: `Cannot approve payout with status: ${payoutRequest.status}` }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // Update payout status
-    payout.status = 'processing';
-    payout.processedAt = new Date();
-    payout.processedBy = admin._id;
+    // Update payout request status
+    payoutRequest.status = 'approved';
+    payoutRequest.processedAt = new Date();
+    payoutRequest.processedBy = admin._id;
     if (externalReference) {
-      payout.externalReference = externalReference;
+      payoutRequest.externalReference = externalReference;
     }
     if (notes) {
-      payout.notes = notes;
+      payoutRequest.notes = notes;
     }
 
-    await payout.save();
+    await payoutRequest.save();
 
-    // Update wallet transaction
-    const wallet = await Wallet.findOne({ seller: payout.seller._id });
+    // Update wallet - mark the matching payout transaction as processing
+    const wallet = await Wallet.findOne({ seller: payoutRequest.seller._id });
     if (wallet) {
       const transaction = wallet.transactions.find(
-        t => t.type === 'payout' && t.metadata?.get('payoutReference') === payout.referenceNumber
+        t => t.type === 'payout' && t.metadata?.payoutReference === payoutRequest.referenceNumber
       );
 
       if (transaction) {
@@ -69,19 +69,17 @@ export async function POST(request, { params }) {
       }
     }
 
-    // payout.seller is populated with storename + email above, so this needs
-    // no extra lookup.
-    await sendPayoutApprovedEmail({ payout, seller: payout.seller });
+    await sendPayoutApprovedEmail({ payout: payoutRequest, seller: payoutRequest.seller });
 
     return new Response(
       JSON.stringify({
         success: true,
         message: 'Payout approved and processing',
         payout: {
-          _id: payout._id,
-          referenceNumber: payout.referenceNumber,
-          status: payout.status,
-          processedAt: payout.processedAt,
+          _id: payoutRequest._id,
+          referenceNumber: payoutRequest.referenceNumber,
+          status: payoutRequest.status,
+          processedAt: payoutRequest.processedAt,
         },
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }

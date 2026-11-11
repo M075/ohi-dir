@@ -1,6 +1,7 @@
 // ============================================================================
 // utils/walletHelper.js — Wallet helpers with dynamic commission & ledger
 // ============================================================================
+import mongoose from 'mongoose';
 import Wallet from '@/models/Wallet';
 
 /**
@@ -225,6 +226,125 @@ export async function processRefund(order, reason) {
   return wallet;
 }
 
+/**
+ * Atomically add a wallet transaction inside a MongoDB session, with
+ * idempotency support. If the same idempotencyKey was already processed,
+ * returns the existing transaction without side effects.
+ *
+ * Use this for any mutation that changes wallet balances (sales, refunds,
+ * payouts, adjustments) so concurrent requests cannot overspend or lose
+ * updates.
+ *
+ * @param {Object} params
+ * @param {string} params.walletId - Wallet _id
+ * @param {'sale'|'refund'|'payout'|'fee'|'adjustment'} params.type
+ * @param {number} params.amount - Always stored as a positive number
+ * @param {number} [params.fee=0]
+ * @param {'pending'|'completed'|'failed'|'processing'} [params.status='pending']
+ * @param {string} params.description
+ * @param {Object} [params.order]
+ * @param {Object} [params.buyer]
+ * @param {string} [params.paymentMethod]
+ * @param {Object} [params.metadata]
+ * @param {string} [params.idempotencyKey]
+ */
+export async function addTransactionAtomically({
+  walletId,
+  type,
+  amount,
+  fee = 0,
+  status = 'pending',
+  description,
+  order,
+  buyer,
+  paymentMethod,
+  metadata = {},
+  idempotencyKey,
+}) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // Idempotency: if this key was already processed, return the existing
+    // transaction without any side effects.
+    if (idempotencyKey) {
+      const existing = await Wallet.findOne({
+        'transactions.idempotencyKey': idempotencyKey,
+      }).session(session);
+
+      if (existing) {
+        const tx = existing.transactions.find(
+          t => t.idempotencyKey === idempotencyKey
+        );
+        await session.commitTransaction();
+        return tx;
+      }
+    }
+
+    const net = amount - fee;
+    const wallet = await Wallet.findOne({
+      _id: walletId,
+      isActive: true,
+    }).session(session);
+
+    if (!wallet) {
+      await session.abortTransaction();
+      throw new Error('Wallet not found or frozen');
+    }
+
+    // Balance guard for debits
+    if (type === 'payout' || type === 'refund') {
+      if (wallet.availableBalance < Math.abs(amount)) {
+        await session.abortTransaction();
+        throw new Error('Insufficient balance');
+      }
+    }
+
+    const transaction = {
+      type,
+      amount,
+      fee,
+      net,
+      status,
+      description,
+      order: order?._id || order,
+      orderNumber: order?.orderNumber,
+      buyer: buyer?._id || buyer,
+      buyerName: buyer?.storename || buyer?.email,
+      paymentMethod,
+      metadata,
+      idempotencyKey,
+    };
+
+    wallet.transactions.push(transaction);
+
+    if (status === 'completed') {
+      if (type === 'sale') {
+        wallet.availableBalance += net;
+        wallet.totalEarnings += amount;
+        wallet.totalFees += fee;
+        wallet.stats.totalOrders += 1;
+      } else if (type === 'refund') {
+        wallet.availableBalance -= Math.abs(amount);
+      } else if (type === 'payout') {
+        wallet.availableBalance -= Math.abs(amount);
+        wallet.totalPayouts += Math.abs(amount);
+      }
+    } else if (status === 'pending' && type === 'sale') {
+      wallet.pendingBalance += net;
+    }
+
+    await wallet.save({ session });
+    await session.commitTransaction();
+    return transaction;
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    session.endSession();
+  }
+}
+
 export default {
   getOrCreateWallet,
   getCommissionPercentage,
@@ -233,4 +353,5 @@ export default {
   processOrderPayment,
   completeOrderPayment,
   processRefund,
+  addTransactionAtomically,
 };

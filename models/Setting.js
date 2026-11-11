@@ -13,6 +13,14 @@ const SettingSchema = new Schema(
       min: 0,
       max: 100,
     },
+    // Minimum amount a seller can request as a payout. Set by the admin in the
+    // dashboard settings and synced to every seller wallet so the request-payout
+    // button and validation stay in sync with this value.
+    minimumPayout: {
+      type: Number,
+      default: 500,
+      min: 0,
+    },
     // When the abandoned-checkout sweep last ran. Used to throttle the
     // opportunistic expiry that runs off organic traffic, since Vercel's Hobby
     // plan only permits a once-daily cron. See utils/expirePendingOrders.js.

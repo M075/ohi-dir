@@ -1,5 +1,6 @@
 import connectDB from '@/config/database';
 import Setting from '@/models/Setting';
+import Wallet from '@/models/Wallet';
 import { getSessionUser } from '@/utils/getSessionUser';
 
 // Helper function to send JSON responses
@@ -45,7 +46,7 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { taxEnabled, commissionPercentage } = body;
+    const { taxEnabled, commissionPercentage, minimumPayout } = body;
 
     let settings = await Setting.findOne();
     if (!settings) {
@@ -59,6 +60,15 @@ export async function POST(request) {
     if (typeof commissionPercentage === 'number') {
       // Clamp between 0 and 100
       settings.commissionPercentage = Math.min(100, Math.max(0, commissionPercentage));
+    }
+
+    if (typeof minimumPayout === 'number') {
+      const clamped = Math.max(0, minimumPayout);
+      settings.minimumPayout = clamped;
+
+      // Keep every seller wallet in sync so the request-payout button and its
+      // validation reflect the same minimum the admin just set.
+      await Wallet.updateMany({}, { 'payoutSettings.minimumPayout': clamped });
     }
 
     await settings.save();

@@ -44,7 +44,6 @@ import {
 import { useSession } from 'next-auth/react';
 
 // Constants
-const MINIMUM_PAYOUT = 500;
 const ACCOUNT_MASK_LENGTH = 4;
 
 export default function SellerWalletDashboard() {
@@ -53,12 +52,14 @@ export default function SellerWalletDashboard() {
   const [transactions, setTransactions] = useState([]);
   const [walletData, setWalletData] = useState({
     balance: 0,
+    reservedBalance: 0,
     pendingBalance: 0,
     totalEarnings: 0,
     thisMonthEarnings: 0,
     lastMonthEarnings: 0,
     currency: 'ZAR'
   });
+  const [minimumPayout, setMinimumPayout] = useState(500);
   const [payoutHistory, setPayoutHistory] = useState([]);
   const [dateFilter, setDateFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -93,12 +94,16 @@ export default function SellerWalletDashboard() {
       
       setWalletData({
         balance: data.balance || 0,
+        reservedBalance: data.reservedBalance || 0,
         pendingBalance: data.pendingBalance || 0,
         totalEarnings: data.totalEarnings || 0,
         thisMonthEarnings: data.stats?.thisMonth?.earnings || 0,
         lastMonthEarnings: data.stats?.lastMonth?.earnings || 0,
         currency: data.currency || 'ZAR'
       });
+
+      // Keep the request-payout UI in sync with the admin-configured minimum.
+      setMinimumPayout(data.payoutSettings?.minimumPayout ?? 500);
       
       // Set bank details from wallet if available
       if (data.bankDetails) {
@@ -287,18 +292,20 @@ export default function SellerWalletDashboard() {
       return;
     }
 
-    const amount = payoutAmount ? parseFloat(payoutAmount) : walletData.balance;
-    
-    if (amount < MINIMUM_PAYOUT) {
+    const amount = payoutAmount ? parseFloat(payoutAmount) : (walletData.balance - walletData.reservedBalance);
+
+    if (amount < minimumPayout) {
       toast({
         variant: "destructive",
         title: "Validation Error",
-        description: `Minimum payout amount is R ${MINIMUM_PAYOUT.toFixed(2)}.`,
+        description: `Minimum payout amount is R ${minimumPayout.toFixed(2)}.`,
       });
       return;
     }
 
-    if (amount > walletData.balance) {
+    const availableForPayout = walletData.balance - walletData.reservedBalance;
+
+    if (amount > availableForPayout) {
       toast({
         variant: "destructive",
         title: "Validation Error",
@@ -306,6 +313,9 @@ export default function SellerWalletDashboard() {
       });
       return;
     }
+
+    // Idempotency key prevents duplicate payouts on retry
+    const idempotencyKey = `payout-${session.user.id}-${Date.now()}`;
 
     setRequestingPayout(true);
 
@@ -315,7 +325,7 @@ export default function SellerWalletDashboard() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ amount }),
+        body: JSON.stringify({ amount, idempotencyKey }),
       });
 
       const data = await res.json();
@@ -323,7 +333,7 @@ export default function SellerWalletDashboard() {
       if (res.ok) {
         toast({
           title: "Success",
-          description: `Payout request submitted successfully. Reference: ${data.payout?.referenceNumber}`,
+          description: `Payout request submitted successfully. Reference: ${data.payoutRequest?.referenceNumber}`,
         });
         setPayoutDialogOpen(false);
         setPayoutAmount('');
@@ -436,24 +446,29 @@ export default function SellerWalletDashboard() {
                 <DialogHeader>
                   <DialogTitle>Request Payout</DialogTitle>
                   <DialogDescription>
-                    Request a payout to your bank account. Minimum amount is R {MINIMUM_PAYOUT.toFixed(2)}.
+                    Request a payout to your bank account. Minimum amount is R {minimumPayout.toFixed(2)}.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg">
                     <p className="text-sm text-muted-foreground">Available Balance</p>
                     <p className="text-2xl font-bold text-emerald-600">{formatCurrency(walletData.balance)}</p>
+                    {walletData.reservedBalance > 0 && (
+                      <p className="text-xs text-orange-600 mt-1">
+                        {formatCurrency(walletData.reservedBalance)} reserved for pending payouts
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="payoutAmount">Payout Amount (leave empty for full balance)</Label>
+                    <Label htmlFor="payoutAmount">Payout Amount (leave empty for full available balance)</Label>
                     <Input
                       id="payoutAmount"
                       type="number"
-                      placeholder={`Max: ${formatCurrency(walletData.balance)}`}
+                      placeholder={`Max: ${formatCurrency(walletData.balance - walletData.reservedBalance)}`}
                       value={payoutAmount}
                       onChange={(e) => setPayoutAmount(e.target.value)}
-                      min={MINIMUM_PAYOUT}
-                      max={walletData.balance}
+                      min={minimumPayout}
+                      max={walletData.balance - walletData.reservedBalance}
                     />
                   </div>
                 </div>
@@ -470,7 +485,7 @@ export default function SellerWalletDashboard() {
                     type="button"
                     variant="success"
                     onClick={handlePayoutRequest}
-                    disabled={requestingPayout || walletData.balance < MINIMUM_PAYOUT}
+                    disabled={requestingPayout || walletData.balance < minimumPayout}
                   >
                     {requestingPayout ? (
                       <>
@@ -505,7 +520,18 @@ export default function SellerWalletDashboard() {
                   <p className="text-2xl font-bold text-emerald-600">
                     {formatCurrency(walletData.balance)}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">Ready for payout</p>
+                  {walletData.reservedBalance > 0 ? (
+                    <>
+                      <p className="text-xs text-orange-600 mt-1">
+                        {formatCurrency(walletData.reservedBalance)} reserved for pending payouts
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatCurrency(walletData.balance - walletData.reservedBalance)} available for new payouts
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1">Ready for payout</p>
+                  )}
                 </div>
                 <div className="p-3 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
                   <Wallet className="h-6 w-6 text-emerald-600" />
@@ -941,16 +967,21 @@ export default function SellerWalletDashboard() {
                     <div>
                       <h3 className="font-semibold mb-1">Request Payout</h3>
                       <p className="text-sm text-muted-foreground">
-                        Available balance: {formatCurrency(walletData.balance)}
+                        Available balance: {formatCurrency(walletData.balance - walletData.reservedBalance)}
                       </p>
+                      {walletData.reservedBalance > 0 && (
+                        <p className="text-xs text-orange-600 mt-1">
+                          {formatCurrency(walletData.reservedBalance)} reserved for pending payouts
+                        </p>
+                      )}
                       <p className="text-xs text-muted-foreground mt-1">
-                        Minimum payout: R {MINIMUM_PAYOUT.toFixed(2)}
+                        Minimum payout: R {minimumPayout.toFixed(2)}
                       </p>
                     </div>
-                    <Button 
+                    <Button
                       className="bg-emerald-600 hover:bg-emerald-700"
                       onClick={() => setPayoutDialogOpen(true)}
-                      disabled={walletData.balance < MINIMUM_PAYOUT}
+                      disabled={(walletData.balance - walletData.reservedBalance) < minimumPayout}
                     >
                       <Plus className="h-4 w-4 mr-2" />
                       Request

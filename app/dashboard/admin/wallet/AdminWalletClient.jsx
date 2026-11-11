@@ -565,7 +565,7 @@ export default function AdminWalletClient() {
               <div className="space-y-4">
                 {pendingPayouts.map((payout) => (
                   <div
-                    key={payout.sellerId}
+                    key={payout.referenceNumber || payout._id}
                     className="flex items-center justify-between p-4 border rounded-lg"
                   >
                     <div className="flex items-center gap-4">
@@ -576,7 +576,7 @@ export default function AdminWalletClient() {
                         <p className="font-medium">{payout.sellerName}</p>
                         <p className="text-sm text-muted-foreground">{payout.sellerEmail}</p>
                         <p className="text-xs text-muted-foreground">
-                          {payout.transactionCount} transactions pending
+                          {payout.referenceNumber} • {payout.status}
                         </p>
                       </div>
                     </div>
@@ -585,7 +585,9 @@ export default function AdminWalletClient() {
                         <p className="text-xl font-bold text-emerald-600">
                           {formatCurrency(payout.amount)}
                         </p>
-                        <p className="text-xs text-muted-foreground">Available for payout</p>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(payout.requestedAt).toLocaleDateString('en-ZA')}
+                        </p>
                       </div>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>

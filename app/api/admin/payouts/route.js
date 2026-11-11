@@ -2,7 +2,7 @@
 // FILE 1: app/api/admin/payouts/route.js
 // ============================================================================
 import connectDB from '@/config/database';
-import Payout from '@/models/Payout';
+import PayoutRequest from '@/models/PayoutRequest';
 import Wallet from '@/models/Wallet';
 import User from '@/models/User';
 import { getSessionUser } from '@/utils/getSessionUser';
@@ -14,7 +14,7 @@ async function checkAdminAccess(sessionUser) {
   }
 
   const user = await User.findById(sessionUser.userId);
-  
+
   if (!user?.isAdmin || !user?.adminPermissions?.includes('manage_sellers')) {
     return { authorized: false, error: 'Admin access required' };
   }
@@ -22,7 +22,7 @@ async function checkAdminAccess(sessionUser) {
   return { authorized: true, user };
 }
 
-// GET - Fetch all payouts with filters
+// GET - Fetch all payout requests with filters
 export async function GET(request) {
   try {
     await connectDB();
@@ -75,41 +75,41 @@ export async function GET(request) {
       ];
     }
 
-    const payouts = await Payout.find(query)
+    const payoutRequests = await PayoutRequest.find(query)
       .populate('seller', 'storename email image')
       .populate('processedBy', 'storename email')
       .sort({ requestedAt: -1 })
       .limit(limit)
       .skip(skip);
 
-    const total = await Payout.countDocuments(query);
+    const total = await PayoutRequest.countDocuments(query);
 
     // Calculate stats
     const stats = {
       pending: {
-        count: await Payout.countDocuments({ status: 'pending' }),
-        amount: await Payout.aggregate([
+        count: await PayoutRequest.countDocuments({ status: 'pending' }),
+        amount: await PayoutRequest.aggregate([
           { $match: { status: 'pending' } },
           { $group: { _id: null, total: { $sum: '$amount' } } }
         ]).then(res => res[0]?.total || 0)
       },
-      processing: {
-        count: await Payout.countDocuments({ status: 'processing' }),
-        amount: await Payout.aggregate([
-          { $match: { status: 'processing' } },
+      approved: {
+        count: await PayoutRequest.countDocuments({ status: 'approved' }),
+        amount: await PayoutRequest.aggregate([
+          { $match: { status: 'approved' } },
           { $group: { _id: null, total: { $sum: '$amount' } } }
         ]).then(res => res[0]?.total || 0)
       },
       completed: {
-        count: await Payout.countDocuments({ status: 'completed' }),
-        amount: await Payout.aggregate([
+        count: await PayoutRequest.countDocuments({ status: 'completed' }),
+        amount: await PayoutRequest.aggregate([
           { $match: { status: 'completed' } },
           { $group: { _id: null, total: { $sum: '$amount' } } }
         ]).then(res => res[0]?.total || 0)
       },
       failed: {
-        count: await Payout.countDocuments({ status: 'failed' }),
-        amount: await Payout.aggregate([
+        count: await PayoutRequest.countDocuments({ status: 'failed' }),
+        amount: await PayoutRequest.aggregate([
           { $match: { status: 'failed' } },
           { $group: { _id: null, total: { $sum: '$amount' } } }
         ]).then(res => res[0]?.total || 0)
@@ -122,29 +122,29 @@ export async function GET(request) {
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
 
-    stats.totalThisMonth = await Payout.aggregate([
-      { 
-        $match: { 
+    stats.totalThisMonth = await PayoutRequest.aggregate([
+      {
+        $match: {
           status: 'completed',
           completedAt: { $gte: startOfMonth }
-        } 
+        }
       },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]).then(res => res[0]?.total || 0);
 
-    stats.totalLastMonth = await Payout.aggregate([
-      { 
-        $match: { 
+    stats.totalLastMonth = await PayoutRequest.aggregate([
+      {
+        $match: {
           status: 'completed',
           completedAt: { $gte: startOfLastMonth, $lte: endOfLastMonth }
-        } 
+        }
       },
       { $group: { _id: null, total: { $sum: '$amount' } } }
     ]).then(res => res[0]?.total || 0);
 
     return new Response(
       JSON.stringify({
-        payouts,
+        payouts: payoutRequests,
         total,
         limit,
         skip,
@@ -161,13 +161,3 @@ export async function GET(request) {
     );
   }
 }
-
-
-
-
-
-
-
-
-
-

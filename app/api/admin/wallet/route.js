@@ -2,6 +2,7 @@
 import connectDB from '@/config/database';
 import User from '@/models/User';
 import Wallet from '@/models/Wallet';
+import PayoutRequest from '@/models/PayoutRequest';
 import Order from '@/models/Order';
 import { getSessionUser } from '@/utils/getSessionUser';
 
@@ -30,21 +31,27 @@ export async function GET(request) {
     
     // If requesting pending payouts specifically
     if (pendingPayouts === 'true') {
-      const wallets = await Wallet.find({ availableBalance: { $gt: 0 } })
+      // Return actual payout requests that are pending or approved, so the
+      // admin's pending list stays in sync with seller requests and clears
+      // once an admin confirms/completes or rejects a payout.
+      const payoutRequests = await PayoutRequest.find({
+        status: { $in: ['pending', 'approved'] },
+      })
         .populate('seller', 'storename email')
+        .sort({ requestedAt: -1 })
         .lean();
-      
-      // Minimum payout threshold - could be moved to env variable or config
-      const MINIMUM_PAYOUT_THRESHOLD = parseInt(process.env.MINIMUM_PAYOUT_THRESHOLD || '500');
-      
-      const pendingPayoutsList = wallets.map(wallet => ({
-        sellerId: wallet.seller?._id,
-        sellerName: wallet.seller?.storename || 'Unknown',
-        sellerEmail: wallet.seller?.email || 'Unknown',
-        amount: wallet.availableBalance,
-        transactionCount: wallet.transactions?.filter(t => t.status === 'completed' && t.type === 'sale').length || 0
-      })).filter(p => p.amount >= MINIMUM_PAYOUT_THRESHOLD);
-      
+
+      const pendingPayoutsList = payoutRequests.map((payout) => ({
+        sellerId: payout.seller?._id,
+        sellerName: payout.seller?.storename || 'Unknown',
+        sellerEmail: payout.seller?.email || 'Unknown',
+        amount: payout.amount,
+        referenceNumber: payout.referenceNumber,
+        status: payout.status,
+        requestedAt: payout.requestedAt,
+        idempotencyKey: payout.idempotencyKey,
+      }));
+
       return new Response(
         JSON.stringify({ pendingPayouts: pendingPayoutsList }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
