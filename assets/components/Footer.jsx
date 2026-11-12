@@ -75,7 +75,7 @@ const Footer = () => {
         </div>
         <div data-oid="x-.ynyn">
           <p className="text-sm text-gray-500 mt-2 md:mt-0" data-oid="4v24cva">
-            &copy; {currentYear} Ohi! Directory. <br data-oid="i54wrfe" />
+            &copy; {currentYear} Ohi Marketplace. <br data-oid="i54wrfe" />
             All rights reserved.
           </p>
         </div>

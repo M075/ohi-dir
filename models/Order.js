@@ -1,6 +1,6 @@
 // models/Order.js - FIXED VERSION
 import mongoose from 'mongoose';
-import { randomBytes } from 'crypto';
+import OrderCounter from './OrderCounter';
 const { Schema, model, models } = mongoose;
 
 const OrderItemSchema = new Schema({
@@ -333,8 +333,17 @@ const OrderSchema = new Schema(
   }
 );
 
-// Generate unique order number BEFORE validation
-OrderSchema.pre('validate', function () {
+// Generate unique order number BEFORE validation.
+//
+// Format: ORDER - YYYYMMDD - 0001
+//   - YYYYMMDD is the order date (server local time)
+//   - 0001 is a per-day sequence that increments with every order and resets at midnight
+//
+// The sequence is handed out with an atomic $inc on a per-day counter document,
+// so concurrent checkouts never receive the same number. Gaps are possible if a
+// created order is later aborted or cancelled — expected and fine for an order
+// number; uniqueness is what the unique index guards.
+OrderSchema.pre('validate', async function () {
   // Only generate if this is a new order and orderNumber is not set
   if (this.isNew && !this.orderNumber) {
     const date = new Date();
@@ -342,19 +351,18 @@ OrderSchema.pre('validate', function () {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
 
-    // Crypto-random, not Math.random: the previous 4-digit suffix gave only
-    // 10,000 order numbers per day, which is trivially enumerable. Ten base32
-    // characters is ~50 bits, so guessing is not a viable attack and the
-    // read-then-write uniqueness loop (which could collide under concurrent
-    // checkouts anyway) is no longer needed — the unique index is enough.
-    const suffix = randomBytes(7)
-      .toString('base64')
-      .replace(/[^A-Z0-9]/gi, '')
-      .toUpperCase()
-      .slice(0, 10)
-      .padEnd(10, '0');
+    const dateStr = `${year}${month}${day}`; // e.g. 20261112
+    const counterKey = `${year}-${month}-${day}`; // e.g. 2026-11-12
 
-    this.orderNumber = `ORD-${year}${month}${day}-${suffix}`;
+    // Atomic increment with upsert: first order of the day gets 0001.
+    const counter = await OrderCounter.findOneAndUpdate(
+      { date: counterKey },
+      { $inc: { count: 1 } },
+      { upsert: true, new: true }
+    );
+
+    const sequence = String(counter.count).padStart(4, '0');
+    this.orderNumber = `ORDER - ${dateStr} - ${sequence}`;
   }
 });
 
